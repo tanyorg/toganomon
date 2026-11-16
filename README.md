@@ -10,7 +10,7 @@ with the METAR wind, what happened next (landed / went around again / did not
 land) and a thinned track in runway coordinates.
 
 Status: extracted from a home receiver setup at Fukuoka (RJFF), where it has
-run since November 2026. The web view is still to come.
+run since November 2026.
 
 ## Requirements
 
@@ -42,10 +42,30 @@ See [`examples/rjff.toml`](examples/rjff.toml).
   runway geometry for drawing the tracks.
 - `history` / `state`: internal, keep them on persistent storage.
 
+## Web view
+
+`web/` is a dependency-free view of the go-arounds JSON: a list where each
+entry opens to a north-up track figure (approach, go-around point, what
+followed, the runway) with the wind and the outcome.
+
+- Standalone: serve `web/` next to the go-arounds JSON and open
+  `index.html` (`?url=<json>` to point elsewhere, `?tz=Asia/Tokyo` for the
+  time zone; default: the browser's).
+- Embedded: load `goaround.css` and `goaround.js`, then
+
+  ```js
+  const view = GoAroundView.mount(document.getElementById('list'), {
+      url: 'go-arounds.json', timeZone: 'UTC',
+      // flightLink(g) -> {href, label} | null, extraLinks(g, element),
+      // storage: {load(), save(obj)}, pollMs
+  });
+  ```
+
 ## Tests
 
 ```sh
 python3 -m unittest discover -s tests
+node tests/web_test.js
 ```
 
 ## License

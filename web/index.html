@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Go-arounds</title>
+    <link rel="stylesheet" href="goaround.css">
+    <style>
+        body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: monospace; }
+        header { padding: 10px 16px; border-bottom: 1px solid #30363d; display: flex; gap: 16px; align-items: baseline; }
+        header h1 { margin: 0; font-size: 1rem; color: #f0b72f; }
+        header span { font-size: 0.75rem; color: #8b949e; }
+        main { max-width: 720px; margin: 0 auto; padding: 8px 16px; }
+        #list { font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="heading">GO-AROUNDS</h1>
+        <span id="note"></span>
+    </header>
+    <main><div id="list"></div></main>
+    <script src="goaround.js"></script>
+    <script>
+        // ?url=<go-arounds.json> (default: next to this page), ?tz=<IANA zone> (default: the browser's)
+        const q = new URLSearchParams(location.search);
+        const timeZone = q.get('tz') || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        document.getElementById('note').textContent = `times in ${timeZone}`;
+        const view = GoAroundView.mount(document.getElementById('list'), {
+            url: q.get('url') || 'go-arounds.json',
+            timeZone,
+        });
+        window.addEventListener('resize', () => view.fit());
+    </script>
+</body>
+</html>

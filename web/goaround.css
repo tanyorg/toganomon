@@ -1,0 +1,64 @@
+/* goaround-watch web view (goaround.js). Dark theme; override the colours
+   as needed. The container passed to GoAroundView.mount() gets .ga-view. */
+.ga-view { font-size: 0.72rem; color: #c9d1d9; }
+.ga-empty { color: #8b949e; text-align: center; padding: 16px 0; }
+.ga-item { border-bottom: 1px solid #30363d; padding: 4px 0; }
+.ga-head {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #d29922;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 2px 4px;
+    white-space: pre;
+}
+.ga-head:hover { background: #21262d; }
+.ga-link { display: inline-block; margin-top: 2px; color: #58a6ff; text-decoration: none; pointer-events: auto; }
+.ga-link:hover { text-decoration: underline; }
+.ga-extra .ga-link { margin-right: 8px; }
+.ga-fig {
+    position: relative;
+    margin-top: 4px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+}
+.ga-track { display: block; width: 100%; height: 300px; }
+/* Description and legend over the top left of the figure; clicks other than
+   on links pass through to the figure. */
+.ga-overlay {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 4px 6px;
+    background: rgba(13, 17, 23, 0.8);
+    border-radius: 3px;
+    pointer-events: none;
+}
+.ga-info-title { color: #f0b72f; font-weight: bold; white-space: pre; }
+.ga-info-line { color: #c9d1d9; font-size: 0.65rem; }
+.ga-legend {
+    margin-top: 4px;
+    padding-top: 3px;
+    border-top: 1px solid #30363d;
+    font-size: 0.6rem;
+    line-height: 1.5;
+    color: #8b949e;
+}
+.ga-key { display: inline-block; margin-right: 5px; vertical-align: middle; }
+.ga-key-line { width: 14px; height: 0; border-top: 2px solid; }
+.ga-key-dot { width: 7px; height: 7px; margin-left: 3px; margin-right: 8px; border-radius: 50%; }
+.ga-key-rwy { border-top: 4px solid #c9d1d9; }
+.ga-key-before { border-color: #58a6ff; }
+.ga-key-after { border-color: #d29922; }
+.ga-key-turn { background: #f85149; }
+.ga-key-end { background: #3fb950; }
+.ga-rwy { stroke: #c9d1d9; stroke-linecap: butt; fill: none; }
+.ga-rwy-label { fill: #8b949e; font-family: monospace; }
+.ga-before { stroke: #58a6ff; fill: none; stroke-linejoin: round; }
+.ga-after { stroke: #d29922; fill: none; stroke-linejoin: round; }
+.ga-turn { fill: #f85149; }
+.ga-end { fill: #3fb950; }
