@@ -1,0 +1,41 @@
+# goaround-watch configuration for Fukuoka (RJFF).
+# Copy to /etc/goaround-watch.toml and adjust the paths.
+
+[airport]
+icao = "RJFF"
+arp = [33.585, 130.451]          # airport reference point (lat, lon)
+
+# One [[runway]] per runway (or pair of close parallel runways sharing one
+# gate). ends = the two designators; true_track = true track flown on the
+# first end. The gate is a box around the extended centreline through
+# center (default: the ARP).
+[[runway]]
+ends = ["16", "34"]
+true_track = 157.0
+gate_along_km = 6.0              # each way from the centre along the centreline
+gate_cross_km = 1.0              # each side of the centreline
+length_m = 2800                  # only for drawing
+
+# Checked on 2026-11-12..14 traces: points below 1000 ft near the airport
+# track 150-160 or 330-340 deg. Departures from 16 are first received
+# anywhere from the ground to ~1400 ft, hence the higher departure limit.
+[gate]
+arr_alt_ft = 1000
+dep_alt_ft = 2000
+track_tol_deg = 20.0
+rate_fpm = 200
+
+[go_around]
+window_s = 600                   # arrival -> departure within this
+min_gs_kt = 60                   # slower arrivals are never paired
+exclude_categories = ["A7"]      # rotorcraft
+
+[paths]
+aircraft = "/run/readsb/aircraft.json"
+traces = "/run/readsb/traces"
+state = "/var/lib/goaround-watch/state.json"
+history = "/var/lib/goaround-watch/go_arounds.json"
+summary = "/var/www/html/goaround-watch/summary.json"
+go_arounds = "/var/www/html/goaround-watch/go-arounds.json"
+# metar = "/var/www/html/metar.txt"   # raw METAR text for the QNH correction and wind
+# log = "/var/log/goaround-watch.log" # one line per go-around
