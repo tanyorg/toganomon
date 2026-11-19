@@ -196,6 +196,41 @@ class Movements(unittest.TestCase):
                 cs.TRACES_DIR = old
 
 
+class Candidates(unittest.TestCase):
+    def test_fast_departure_is_read_after_leaving_the_box(self):
+        # ANA260 2026-11-19: on the ground at one run, above max_alt_ft at the
+        # next; the departure is only in trace_recent read after that.
+        with tempfile.TemporaryDirectory() as d:
+            old = cs.TRACES_DIR
+            cs.TRACES_DIR = d
+            try:
+                os.makedirs(os.path.join(d, "7c"))
+                st = cs.load_state("/nonexistent", T0)
+                st["movements"] = []
+                p = gate_point(0, -1, 0, 300, 337.0, 0)
+                ground = {"now": T0, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
+                                                   "alt_baro": "ground"}]}
+                cs.update_movements(st, ground)
+                self.assertEqual(st["candidates"], {"86837c": T0})
+                with open(os.path.join(d, "7c", "trace_recent_86837c.json"), "w") as f:
+                    json.dump(pass_trace(T0 + 10, 0, -5, 300, 2000, 337.0, 3500), f)
+                high = {"now": T0 + 60, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
+                                                      "alt_baro": 5000}]}
+                self.assertEqual(cs.candidates(high), [])
+                cs.update_movements(st, high)
+                self.assertEqual([(m[1], m[2]) for m in st["movements"]], [("dep", "34")])
+                # dropped CANDIDATE_KEEP_S after it was last a candidate
+                cs.update_movements(st, dict(high, now=T0 + cs.CANDIDATE_KEEP_S + 1))
+                self.assertEqual(st["candidates"], {})
+            finally:
+                cs.TRACES_DIR = old
+
+    def test_bad_candidates_in_state_are_reset(self):
+        st = {"started": T0, "aircraft": {}, "movements": [], "candidates": ["x"]}
+        cs.update_movements(st, {"now": T0, "aircraft": []})
+        self.assertEqual(st["candidates"], {})
+
+
 def append_pass(doc, later):
     """Append a pass that starts at later["timestamp"] to doc (dt is relative to doc)."""
     off = later["timestamp"] - doc["timestamp"]
