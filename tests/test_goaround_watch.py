@@ -367,6 +367,13 @@ class History(unittest.TestCase):
         self.assertEqual(h[0]["qnh"], 982.0)
         self.assertEqual(cs.public_history(h, T0 + 120)["go_arounds"][0]["qnh"], 982.0)
 
+    def test_done_is_public(self):
+        # consumers (e.g. a follow-up post) wait for the settled outcome and track
+        h = cs.update_history([], self.ga_state(), T0 + 120, None, lambda hx: None)
+        self.assertIs(cs.public_history(h, T0 + 120)["go_arounds"][0]["done"], False)
+        h[0]["done"] = True
+        self.assertIs(cs.public_history(h, T0 + 120)["go_arounds"][0]["done"], True)
+
     def test_old_go_around_gets_no_metar(self):
         st = self.ga_state()
         h = cs.update_history([], st, T0 + 65 + cs.METAR_FRESH_S + 1, "RJFF 130400Z 33018KT", lambda hx: None)
@@ -461,10 +468,10 @@ class History(unittest.TestCase):
         self.assertEqual(len(h), 1)   # not added twice
 
     def test_public_history_newest_first(self):
-        hist = [{"id": "a", "t": 1, "done": True}, {"id": "b", "t": 2, "done": False}]
+        hist = [{"id": "a", "t": 1, "done": True, "track_full": True}, {"id": "b", "t": 2, "done": False}]
         out = cs.public_history(hist, 5)
         self.assertEqual([g["id"] for g in out["go_arounds"]], ["b", "a"])
-        self.assertNotIn("done", out["go_arounds"][0])
+        self.assertNotIn("track_full", out["go_arounds"][1])   # internal
 
     def test_extract_track_ground_and_bounds(self):
         doc = {"timestamp": T0, "trace": [
