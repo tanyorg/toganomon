@@ -116,7 +116,9 @@ DEFAULTS = {
     "airport": {"icao": None, "arp": None},
     "gate": {"arr_alt_ft": 1000, "dep_alt_ft": 2000, "track_tol_deg": 20.0, "rate_fpm": 200},
     "go_around": {"window_s": 600, "min_gs_kt": 60, "exclude_categories": ["A7"]},
-    "candidates": {"radius_km": 15.0, "max_alt_ft": 3000},
+    # max_alt_ft well above the departure gate: a departure first heard in
+    # the climb can be some 3000 ft higher at the next run.
+    "candidates": {"radius_km": 15.0, "max_alt_ft": 6000},
     "paths": {
         "aircraft": "/run/readsb/aircraft.json",
         "traces": "/run/readsb/traces",
