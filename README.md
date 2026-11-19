@@ -40,6 +40,9 @@ See [`examples/rjff.toml`](examples/rjff.toml).
   the runway in use, go-arounds in the window.
 - `go_arounds` (JSON): every go-around, newest first, with the airport and
   runway geometry for drawing the tracks.
+  `done` turns true once the entry is settled: its outcome no longer changes
+  (an arrival that looked like a landing can still become another go-around)
+  and the track is complete.
 - `history` / `state`: internal, keep them on persistent storage.
 
 ## Web view

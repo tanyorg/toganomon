@@ -726,7 +726,7 @@ def airport_info():
 def public_history(history, now):
     """GA_OUT payload: newest first, without internal fields."""
     keep = ("id", "t", "arr_t", "hex", "flight", "rwy", "climb_after_s", "wind",
-            "wind_rwy", "qnh", "gs", "category", "outcome", "track", "track_from")
+            "wind_rwy", "qnh", "gs", "category", "outcome", "track", "track_from", "done")
     return {"now": now, "airport": airport_info(),
             "go_arounds": [{k: h.get(k) for k in keep} for h in reversed(history)]}
 
