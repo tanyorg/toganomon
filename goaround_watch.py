@@ -19,7 +19,8 @@ for WINDOW_S, and writes a small JSON summary:
 window; "total" also includes Mode S-only aircraft.
 
 Departures and arrivals come from readsb's per-aircraft traces (a point every
-few seconds, `--write-json-globe-index`): a point inside a runway gate (a box
+few seconds, `--write-json-globe-index`; trace_recent of every aircraft near
+and low now or within CANDIDATE_KEEP_S): a point inside a runway gate (a box
 around the extended centreline, tracking along the runway) that is
 descending below the arrival altitude is an arrival, climbing below the
 departure altitude a departure. One aircraft counts at most once per kind
@@ -77,6 +78,11 @@ SEEN_S = 60
 # Refuse to count from an aircraft.json that readsb stopped updating.
 STALE_S = 120
 DEDUP_S = 20 * 60
+# An aircraft that was a candidate (near and low) stays one this long, so its
+# trace_recent is still read after it climbed out of the candidate box: a
+# fast departure goes from the runway to above max_alt_ft between two runs.
+# trace_recent covers about the last 5 minutes.
+CANDIDATE_KEEP_S = 5 * 60
 # History: wait this long for the aircraft to land before calling it "not
 # landed"; keep the track from TRACK_BEFORE_S before the approach to
 # TRACK_AFTER_S after landing (or TRACK_MAX_AFTER_S after the go-around),
@@ -459,7 +465,14 @@ def update_movements(state, snapshot, alt_offset=0.0):
             doc = load_trace(path)
             if doc and isinstance(doc.get("icao"), str):
                 record_movements(state, doc["icao"], detect_movements(doc, alt_offset), now)
+    keep = state.get("candidates")
+    if not isinstance(keep, dict):
+        keep = state["candidates"] = {}
     for hx in candidates(snapshot, alt_offset):
+        keep[hx] = now
+    for hx in [h for h, t in keep.items() if not isinstance(t, (int, float)) or now - t > CANDIDATE_KEEP_S]:
+        del keep[hx]
+    for hx in sorted(keep):
         doc = load_trace(trace_path(hx, "recent"))
         if doc:
             record_movements(state, hx, detect_movements(doc, alt_offset), now)
