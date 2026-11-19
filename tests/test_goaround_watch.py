@@ -215,7 +215,7 @@ class Candidates(unittest.TestCase):
                 with open(os.path.join(d, "7c", "trace_recent_86837c.json"), "w") as f:
                     json.dump(pass_trace(T0 + 10, 0, -5, 300, 2000, 337.0, 3500), f)
                 high = {"now": T0 + 60, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
-                                                      "alt_baro": 5000}]}
+                                                      "alt_baro": 7000}]}
                 self.assertEqual(cs.candidates(high), [])
                 cs.update_movements(st, high)
                 self.assertEqual([(m[1], m[2]) for m in st["movements"]], [("dep", "34")])
@@ -224,6 +224,13 @@ class Candidates(unittest.TestCase):
                 self.assertEqual(st["candidates"], {})
             finally:
                 cs.TRACES_DIR = old
+
+    def test_departure_first_heard_in_the_climb(self):
+        # 86803b 2026-11-19: first heard at 1275 ft, at 3150 ft 8.3 km out at
+        # the next run; never near and low before
+        p = gate_point(0, 8.3, 0, 3150, 157.0, 2400)
+        snap = {"now": T0, "aircraft": [{"hex": "86803b", "seen": 0, "lat": p[1], "lon": p[2], "alt_baro": 3150}]}
+        self.assertEqual(cs.candidates(snap), ["86803b"])
 
     def test_bad_candidates_in_state_are_reset(self):
         st = {"started": T0, "aircraft": {}, "movements": [], "candidates": ["x"]}
@@ -558,7 +565,8 @@ class Qnh(unittest.TestCase):
         self.assertEqual([e[1:3] for e in ev], [("arr", "16")])
 
     def test_candidates_use_the_offset(self):
-        s = snap(T0, {"hex": "abcdef", "lat": cs.ARP_LAT, "lon": cs.ARP_LON, "alt_baro": 3500})
+        # 500 ft above the limit by pressure altitude, below it after the correction (-891 ft)
+        s = snap(T0, {"hex": "abcdef", "lat": cs.ARP_LAT, "lon": cs.ARP_LON, "alt_baro": cs.CANDIDATE_ALT_FT + 500})
         self.assertEqual(cs.candidates(s), [])
         self.assertEqual(cs.candidates(s, cs.qnh_offset_ft(980.0)), ["abcdef"])
 

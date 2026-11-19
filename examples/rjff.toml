@@ -30,6 +30,14 @@ window_s = 600                   # arrival -> departure within this
 min_gs_kt = 60                   # slower arrivals are never paired
 exclude_categories = ["A7"]      # rotorcraft
 
+# Aircraft whose traces are read: within radius_km of the ARP and below
+# max_alt_ft (pressure altitude), and for 5 minutes after that. Keep
+# max_alt_ft well above dep_alt_ft: a departure first heard in the climb can
+# be some 3000 ft higher at the next run.
+[candidates]
+radius_km = 15.0
+max_alt_ft = 6000
+
 [paths]
 aircraft = "/run/readsb/aircraft.json"
 traces = "/run/readsb/traces"
