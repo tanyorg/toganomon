@@ -49,7 +49,9 @@ See [`examples/rjff.toml`](examples/rjff.toml).
 
 `web/` is a dependency-free view of the go-arounds JSON: a list where each
 entry opens to a north-up track figure (approach, go-around point, what
-followed, the runway) with the wind and the outcome.
+followed, the runway) with the wind and the outcome. Where nothing was
+received for more than 60 s the line is dashed: the aircraft did not fly
+that straight line.
 
 - Standalone: serve `web/` next to the go-arounds JSON and open
   `index.html` (`?url=<json>` to point elsewhere, `?tz=Asia/Tokyo` for the

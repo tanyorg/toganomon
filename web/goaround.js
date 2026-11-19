@@ -22,6 +22,10 @@
     'use strict';
 
     const DEFAULT_RUNWAY_HALF_KM = 1.5;
+    // Two track points further apart than this are joined by a dashed line:
+    // nothing was received in between (the track holds a point per 10 s), so
+    // the straight line is not where the aircraft flew.
+    const GAP_S = 60;
     const PLOT_MIN_W = 120;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const formatters = {};
@@ -83,6 +87,7 @@
             { kind: 'line', cls: 'ga-key-rwy', label: 'RWY' },
             { kind: 'line', cls: 'ga-key-before', label: 'APPROACH' },
             { kind: 'line', cls: 'ga-key-after', label: 'AFTER GO-AROUND' },
+            { kind: 'line', cls: 'ga-key-gap', label: 'NOT RECEIVED' },
             { kind: 'dot', cls: 'ga-key-turn', label: 'GO-AROUND' },
             { kind: 'dot', cls: 'ga-key-end', label: 'END OF TRACK' },
         ];
@@ -110,23 +115,37 @@
         const xy = (along, cross) => [along * ux + cross * uy, -(along * uy - cross * ux)];
         const track = Array.isArray(g.track) ? g.track : [];
         const gaAt = typeof g.track_from === 'number' ? g.t - g.track_from : Infinity;
-        const before = [], after = [];
-        for (const p of track) (p[0] <= gaAt ? before : after).push(xy(p[1], p[2]));
+        const before = [], after = [], beforeT = [], afterT = [];
+        for (const p of track) {
+            const part = p[0] <= gaAt;
+            (part ? before : after).push(xy(p[1], p[2]));
+            (part ? beforeT : afterT).push(p[0]);
+        }
         // keep the line unbroken: the second part starts where the first ends
-        if (before.length && after.length) after.unshift(before[before.length - 1]);
+        if (before.length && after.length) {
+            after.unshift(before[before.length - 1]);
+            afterT.unshift(beforeT[beforeT.length - 1]);
+        }
         // the first end's threshold is where its true track starts (along < 0)
         const end1 = xy(-rw.halfKm, 0), end2 = xy(rw.halfKm, 0);
         const all = before.concat(after, [end1, end2]);
         const pad = 1;
         const minX = Math.min(...all.map(p => p[0])) - pad, maxX = Math.max(...all.map(p => p[0])) + pad;
         const minY = Math.min(...all.map(p => p[1])) - pad, maxY = Math.max(...all.map(p => p[1])) + pad;
-        const path = pts => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' ');
+        const pt = p => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`;
+        const path = pts => pts.map((p, i) => `${i ? 'L' : 'M'}${pt(p)}`).join(' ');
+        // solid where received, a move (M) across a gap; the gaps on their own
+        const solid = (pts, ts) => pts.map((p, i) => `${i && ts[i] - ts[i - 1] <= GAP_S ? 'L' : 'M'}${pt(p)}`).join(' ');
+        const gaps = (pts, ts) => pts.slice(1).map((p, i) => ts[i + 1] - ts[i] > GAP_S ? `M${pt(pts[i])} L${pt(p)}` : '')
+            .filter(Boolean).join(' ');
         return {
             viewBox: `${minX.toFixed(2)} ${minY.toFixed(2)} ${(maxX - minX).toFixed(2)} ${(maxY - minY).toFixed(2)}`,
             runway: path([end1, end2]),
             ends: [{ at: end1, name: rw.ends[0] }, { at: end2, name: rw.ends[1] }],
-            before: path(before),
-            after: path(after),
+            before: solid(before, beforeT),
+            after: solid(after, afterT),
+            beforeGaps: gaps(before, beforeT),
+            afterGaps: gaps(after, afterT),
             start: before[0] || after[0] || null,
             // the go-around point only once the track goes past it: right after
             // a go-around trace_full often still ends on the approach
@@ -196,6 +215,9 @@
         }
         if (geo.before) add('path', { d: geo.before, class: 'ga-before', 'stroke-width': sw * 1.6 });
         if (geo.after) add('path', { d: geo.after, class: 'ga-after', 'stroke-width': sw * 1.6 });
+        const dash = `${(sw * 4).toFixed(3)} ${(sw * 3).toFixed(3)}`;
+        if (geo.beforeGaps) add('path', { d: geo.beforeGaps, class: 'ga-before', 'stroke-width': sw * 1.6, 'stroke-dasharray': dash });
+        if (geo.afterGaps) add('path', { d: geo.afterGaps, class: 'ga-after', 'stroke-width': sw * 1.6, 'stroke-dasharray': dash });
         if (geo.turn) add('circle', { cx: geo.turn[0], cy: geo.turn[1], r: sw * 3.5, class: 'ga-turn' });
         if (geo.end) add('circle', { cx: geo.end[0], cy: geo.end[1], r: sw * 2.5, class: 'ga-end' });
         return el;

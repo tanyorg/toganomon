@@ -54,6 +54,7 @@
 .ga-key-rwy { border-top: 4px solid #c9d1d9; }
 .ga-key-before { border-color: #58a6ff; }
 .ga-key-after { border-color: #d29922; }
+.ga-key-gap { border-top: 2px dashed #8b949e; }
 .ga-key-turn { background: #f85149; }
 .ga-key-end { background: #3fb950; }
 .ga-rwy { stroke: #c9d1d9; stroke-linecap: butt; fill: none; }
