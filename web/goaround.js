@@ -128,8 +128,10 @@
             before: path(before),
             after: path(after),
             start: before[0] || after[0] || null,
-            turn: before.length ? before[before.length - 1] : null,
-            end: after.length ? after[after.length - 1] : null,
+            // the go-around point only once the track goes past it: right after
+            // a go-around trace_full often still ends on the approach
+            turn: before.length && after.length ? before[before.length - 1] : null,
+            end: after.length ? after[after.length - 1] : before.length ? before[before.length - 1] : null,
             scale: Math.max(maxX - minX, maxY - minY),
         };
     }

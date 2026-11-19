@@ -96,6 +96,15 @@ t('trackGeometry: another runway direction (09/27: east-west)', () => {
     assert.ok(Math.abs(w.at[1]) < 1e-9 && Math.abs(geo.start[0] - 2) < 1e-9, 'along = east');
 });
 
+t('trackGeometry: a track not yet past the go-around has no go-around point', () => {
+    // trace_full not rewritten yet: the track ends on the approach (gaAt = 365 s)
+    const geo = v.trackGeometry({ ...base, track: [[0, -9, 0, 3000], [300, -2, 0, 800]] }, RJFF);
+    assert.strictEqual(geo.after, '');
+    assert.strictEqual(geo.turn, null);
+    const last = v.trackGeometry({ ...base, track: [[300, -2, 0, 800]] }, RJFF).start;
+    assert.deepStrictEqual(geo.end, last, 'the end of the track is drawn as the end');
+});
+
 t('trackGeometry: empty track still draws the runway', () => {
     const geo = v.trackGeometry(base, RJFF);
     assert.strictEqual(geo.before, '');
