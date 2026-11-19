@@ -72,7 +72,7 @@ t('runwayOf: from the airport block, with fallbacks', () => {
 
 t('trackGeometry: north up, split at the go-around, runway ends named', () => {
     // along is towards 157 deg (south-south-east); runway 16's threshold is the north end
-    const g = { ...base, track: [[0, -3, 0, 900], [300, 1, 0, 100], [365, 2, 0, 300], [400, 3, 0, 800]] };
+    const g = { ...base, track: [[310, -3, 0, 900], [340, 1, 0, 100], [365, 2, 0, 300], [400, 3, 0, 800]] };
     const geo = v.trackGeometry(g, RJFF);
     const [n, s] = geo.ends;
     assert.deepStrictEqual([n.name, s.name], ['16', '34']);
@@ -81,10 +81,25 @@ t('trackGeometry: north up, split at the go-around, runway ends named', () => {
     assert.strictEqual(geo.before.split('L').length, 3);       // 3 points up to the go-around
     assert.strictEqual(geo.after.split('L').length, 2);        // joint point + 1
     assert.strictEqual(geo.after.split(' L')[0], `M${geo.turn[0].toFixed(2)} ${geo.turn[1].toFixed(2)}`);
+    assert.strictEqual(geo.beforeGaps + geo.afterGaps, '', 'gaps of 60 s or less are solid');
     const [x, y, w, h] = geo.viewBox.split(' ').map(Number);
     for (const p of [geo.start, geo.end, n.at, s.at]) {
         assert.ok(p[0] >= x && p[0] <= x + w && p[1] >= y && p[1] <= y + h, 'inside the viewBox');
     }
+});
+
+t('trackGeometry: a gap of more than 60 s is dashed, not solid', () => {
+    // TWB235 2026-11-19: nothing received for 555 s on the downwind (along 22 km,
+    // cross 12 km) until it was on the RWY34 final
+    const g = { ...base, track: [[0, -3, 0, 900], [365, 2, 0, 300], [380, 22.37, 12.38, 4925],
+                                 [935, 19.81, -2.31, 3325], [950, 18.62, -2.17, 3100]] };
+    const geo = v.trackGeometry(g, RJFF);
+    assert.ok(!geo.before.includes('L'), '365 s apart: no solid line');
+    assert.strictEqual(geo.beforeGaps, geo.before.replace(' M', ' L'), 'the approach gap is dashed');
+    assert.strictEqual((geo.after.match(/M/g) || []).length, 2, 'the solid line breaks at the gap');
+    assert.strictEqual((geo.afterGaps.match(/M/g) || []).length, 1, 'one dashed segment after the go-around');
+    assert.ok(geo.afterGaps.endsWith(geo.after.split('M')[2].trim().split(' L')[0]), 'dashed up to where reception resumed');
+    assert.deepStrictEqual(geo.turn, v.trackGeometry({ ...g, track: g.track.slice(0, 2) }, RJFF).end, 'the go-around point is unchanged');
 });
 
 t('trackGeometry: another runway direction (09/27: east-west)', () => {
@@ -139,7 +154,7 @@ t('plotInset: track to the right of the overlay unless too narrow', () => {
 });
 
 t('legend and flight link', () => {
-    assert.deepStrictEqual(v.legend().map(k => k.label), ['RWY', 'APPROACH', 'AFTER GO-AROUND', 'GO-AROUND', 'END OF TRACK']);
+    assert.deepStrictEqual(v.legend().map(k => k.label), ['RWY', 'APPROACH', 'AFTER GO-AROUND', 'NOT RECEIVED', 'GO-AROUND', 'END OF TRACK']);
     assert.deepStrictEqual(v.flightAware(base), { href: 'https://www.flightaware.com/live/flight/HGB308', label: 'FLIGHTAWARE ↗' });
     assert.strictEqual(v.flightAware({ ...base, flight: null }), null);
 });
