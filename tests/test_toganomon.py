@@ -872,6 +872,61 @@ class Elevation(unittest.TestCase):
         self.assertEqual(seen, [-32.0])        # no usable METAR: just the elevation
 
 
+class CheckRunways(unittest.TestCase):
+    def run_check(self, docs):
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i, doc in enumerate(docs):
+                p = os.path.join(d, f"trace_full_{i:06x}.json")
+                with open(p, "wb") as f:
+                    f.write(gzip.compress(json.dumps(doc).encode()))
+                paths.append(p)
+            return cs.check_runways(paths)
+
+    def skewed(self, t0, deg, cross, along_from, along_to, n=20):
+        """A pass deg off the configured axis, centred cross km to the right."""
+        doc = pass_trace(t0, along_from, along_to, 900, 300, 150, -700, n=n)
+        for p, i in zip(doc["trace"], range(n)):
+            along = along_from + (along_to - along_from) * i / (n - 1)
+            x = cross + along * math.tan(math.radians(deg))
+            q = gate_point(p[0], along, x, p[3], p[5], p[7])
+            p[1], p[2] = q[1], q[2]
+        return doc
+
+    def test_matching_runway(self):
+        r, = self.run_check([pass_trace(T0, 5, -1, 900, 100, 150, -700), pass_trace(T0, -1, 5, 100, 900, 330, 900)])
+        self.assertEqual((r["passes"], r["measured"], r["offset_km"]), (2, 150.3, 0.0))
+        self.assertIn(": OK", cs.check_report([r])[0])
+
+    def test_misaligned_runway_is_reported(self):
+        r, = self.run_check([self.skewed(T0, 6.0, -0.3, 5, -1), self.skewed(T0, 6.0, -0.3, -1, 5)])
+        self.assertEqual(r["passes"], 2)
+        self.assertAlmostEqual(r["measured"], 156.3, delta=0.15)
+        self.assertAlmostEqual(r["offset_km"], -0.3 + 2 * math.tan(math.radians(6)), delta=0.02)
+        line = cs.check_report([r])[0]
+        self.assertIn("(+6.0)", line)
+        self.assertTrue(line.endswith("CHECK"))
+
+    def test_what_is_not_a_pass(self):
+        docs = [
+            pass_trace(T0, 5, 4, 900, 800, 150, -700),                 # too short
+            pass_trace(T0, 5, -1, 3000, 2500, 150, -700),              # too high
+            pass_trace(T0, 5, -1, 900, 100, 150, -700, n=4),           # too few points
+            self.skewed(T0, 40.0, 0.0, 2, -2),                         # crossing, not along
+            {"timestamp": T0, "trace": "bad"}, None,
+        ]
+        r, = self.run_check(docs)
+        self.assertEqual(r["passes"], 0)
+        self.assertIn("no pass", cs.check_report([r])[0])
+
+    def test_gap_splits_a_pass(self):
+        doc = pass_trace(T0, 5, -1, 900, 100, 150, -700)
+        for p in doc["trace"][10:]:
+            p[0] += 120
+        r, = self.run_check([doc])
+        self.assertEqual(r["passes"], 2)
+
+
 class TwoRunways(unittest.TestCase):
     """A crossing runway 09/27 1.5 km north of the ARP, next to RJFF's 16/34."""
 

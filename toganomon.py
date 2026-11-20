@@ -5,6 +5,7 @@ readsb traces.
 Run every minute (cron or a systemd timer):
 
     toganomon.py [-c /etc/toganomon.toml]
+    toganomon.py [-c ...] --check-runways   # configured runways vs real traffic
 
 Each run reads readsb's aircraft.json, records the ICAO address (hex) of
 every aircraft heard in the last SEEN_S seconds, drops addresses not heard
@@ -67,6 +68,11 @@ examples/rjff.toml); the configuration path can also be given with
 TOGANOMON_CONFIG. An airport listed in airports.json needs only its ICAO
 code: the reference point, elevation and runway gates come from there
 unless the configuration gives them.
+
+--check-runways measures every configured runway against the traffic in
+trace_full_*: the true track and the centreline offset of the passes
+through its gate, low and straight. Use it to check a new airports.json
+entry or a hand-written [[runway]].
 """
 import argparse
 import glob
@@ -538,6 +544,101 @@ def load_trace(path):
         return None
 
 
+# --check-runways: a pass is a run of points without a gap over
+# CHECK_GAP_S, inside the gate widened to CHECK_CROSS_KM each side, below
+# CHECK_ALT_FT above the airport; it counts when it has CHECK_MIN_POINTS
+# points, covers CHECK_MIN_KM and runs within CHECK_TOL_DEG of the runway.
+CHECK_GAP_S = 60
+CHECK_CROSS_KM = 2.0
+CHECK_ALT_FT = 1500
+CHECK_MIN_POINTS = 5
+CHECK_MIN_KM = 2.0
+CHECK_TOL_DEG = 20.0
+CHECK_OK_DEG = 1.0
+CHECK_OK_KM = 0.2
+
+
+def runway_passes(doc, rw):
+    """[(true track folded to the first end, mean cross km)] of doc's passes
+    through rw's gate."""
+    base = doc.get("timestamp") if isinstance(doc, dict) else None
+    trace = doc.get("trace") if isinstance(doc, dict) else None
+    if not isinstance(base, (int, float)) or not isinstance(trace, list):
+        return []
+    runs, run, last_t = [], [], None
+    for p in trace:
+        if not (isinstance(p, list) and len(p) > 3):
+            continue
+        t, lat, lon, alt = p[0], p[1], p[2], p[3]
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (t, lat, lon, alt)):
+            continue
+        along, cross = runway_frame(lat, lon, rw)
+        inside = (abs(along) <= rw["gate_along_km"] and abs(cross) <= CHECK_CROSS_KM
+                  and alt - ELEVATION_FT <= CHECK_ALT_FT)
+        if not inside or (last_t is not None and t - last_t > CHECK_GAP_S):
+            if len(run) >= CHECK_MIN_POINTS:
+                runs.append(run)
+            run = []
+        if inside:
+            run.append((along, cross))
+        last_t = t
+    if len(run) >= CHECK_MIN_POINTS:
+        runs.append(run)
+    out = []
+    for run in runs:
+        (a0, c0), (a1, c1) = run[0], run[-1]
+        if math.hypot(a1 - a0, c1 - c0) < CHECK_MIN_KM:
+            continue
+        # angle off the configured axis, + = clockwise, folded to the first end
+        off = math.degrees(math.atan2(c1 - c0, a1 - a0))
+        if abs(off) > 90:
+            off = off - 180 if off > 0 else off + 180
+        if abs(off) > CHECK_TOL_DEG:
+            continue
+        out.append(((rw["true_track"] + off) % 360.0, sum(c for _, c in run) / len(run)))
+    return out
+
+
+def check_runways(paths=None):
+    """[{"ends", "true_track", "passes", "measured", "offset_km"}] per
+    configured runway; measured / offset_km are medians (None: no pass)."""
+    import statistics
+    if paths is None:
+        paths = glob.glob(os.path.join(TRACES_DIR, "*", "trace_full_*.json"))
+    found = [[] for _ in RUNWAYS]
+    for path in paths:
+        doc = load_trace(path)
+        for i, rw in enumerate(RUNWAYS):
+            found[i].extend(runway_passes(doc, rw))
+    out = []
+    for rw, passes in zip(RUNWAYS, found):
+        measured = offset = None
+        if passes:
+            ref = rw["true_track"]
+            measured = round((ref + statistics.median(
+                (tr - ref + 180.0) % 360.0 - 180.0 for tr, _ in passes)) % 360.0, 1)
+            offset = round(statistics.median(c for _, c in passes), 2)
+        out.append({"ends": list(rw["ends"]), "true_track": rw["true_track"], "passes": len(passes),
+                    "measured": measured, "offset_km": offset})
+    return out
+
+
+def check_report(results):
+    lines = []
+    for r in results:
+        name = "/".join(r["ends"])
+        if not r["passes"]:
+            lines.append(f"{ICAO} {name}: true_track {r['true_track']:.1f}, no pass through the gate found")
+            continue
+        diff = (r["measured"] - r["true_track"] + 180.0) % 360.0 - 180.0
+        side = "right" if r["offset_km"] >= 0 else "left"
+        ok = abs(diff) <= CHECK_OK_DEG and abs(r["offset_km"]) <= CHECK_OK_KM
+        lines.append(f"{ICAO} {name}: true_track {r['true_track']:.1f}, measured {r['measured']:.1f} "
+                     f"({diff:+.1f}) from {r['passes']} passes, centreline {abs(r['offset_km']):.2f} km "
+                     f"{side} of the centre (looking towards {r['ends'][0]}): {'OK' if ok else 'CHECK'}")
+    return lines
+
+
 def trace_path(hx, kind):
     return os.path.join(TRACES_DIR, hx[-2:], f"trace_{kind}_{hx}.json")
 
@@ -951,12 +1052,18 @@ def summary(state, now):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Airport movements and probable go-arounds from readsb traces.")
     ap.add_argument("-c", "--config", default=DEFAULT_CONFIG, help=f"TOML configuration (default {DEFAULT_CONFIG})")
+    ap.add_argument("--check-runways", action="store_true",
+                    help="compare the configured runways with the traffic in trace_full_* and exit")
     args = ap.parse_args(argv)
     try:
         configure(load_config(args.config))
     except ConfigError as e:
         print(f"[{time.strftime('%Y-%m-%d %X')}] configuration: {e}", file=sys.stderr)
         return 2
+    if args.check_runways:
+        results = check_runways()
+        print("\n".join(check_report(results)))
+        return 0 if all(r["passes"] for r in results) else 1
     try:
         with open(AIRCRAFT_JSON, encoding="utf-8") as f:
             snapshot = json.load(f)
