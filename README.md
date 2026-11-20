@@ -1,4 +1,7 @@
-# goaround-watch
+# toganomon
+
+> **toganomon** — named after TOGA (Take-Off/Go-Around), the thrust setting
+> a pilot selects to go around, plus *-nomon* for monitor.
 
 Counts an airport's arrivals and departures and detects probable go-arounds
 from the per-aircraft traces of [readsb](https://github.com/wiedehopf/readsb)
@@ -14,6 +17,10 @@ land) and a thinned track in runway coordinates.
 Status: extracted from a home receiver setup at Fukuoka (RJFF), where it has
 run since November 2026.
 
+Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
+(GNSS/NMEA and PPS monitors) and [aisnomon](https://github.com/tanyorg/aisnomon)
+(AIS reception monitor).
+
 ## Requirements
 
 - readsb writing traces: `--write-json-globe-index` (the files
@@ -25,10 +32,10 @@ run since November 2026.
 ## Setup
 
 ```sh
-sudo install -m 0755 goaround_watch.py /usr/local/bin/
-sudo cp examples/rjff.toml /etc/goaround-watch.toml   # then edit it for your airport
+sudo install -m 0755 toganomon.py /usr/local/bin/
+sudo cp examples/rjff.toml /etc/toganomon.toml   # then edit it for your airport
 # every minute, e.g. in /etc/crontab:
-# * * * * * root /usr/local/bin/goaround_watch.py >> /var/log/goaround-watch.log 2>&1
+# * * * * * root /usr/local/bin/toganomon.py >> /var/log/toganomon.log 2>&1
 ```
 
 The configuration describes the airport reference point, one `[[runway]]`
