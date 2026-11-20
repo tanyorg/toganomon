@@ -1,0 +1,15 @@
+{
+ "source": "OurAirports data of 2026-11-20 (public domain), drafted by tools/make_airports.py; each entry checked against ADS-B traffic with toganomon.py --check-runways",
+ "airports": {
+  "RJFF": {
+   "name": "Fukuoka Airport",
+   "arp": [33.585899, 130.451004],
+   "elevation_ft": 32,
+   "checked": "2026-11-21: --check-runways measured 150.4 deg true from 253 passes, centreline 0.11 km left of the centre (between the two runways)",
+   "runways": [
+    {"ends": ["16", "34"], "true_track": 150.3, "center": [33.586069, 130.4492],
+     "gate_cross_km": 1.1, "length_m": 2800, "members": ["16L/34R", "16R/34L"]}
+   ]
+  }
+ }
+}

@@ -26,6 +26,9 @@ RJFF_TOML = os.path.join(HERE, "..", "examples", "rjff.toml")
 with open(RJFF_TOML, "rb") as _f:
     RJFF = cs.parse_config(tomllib.load(_f))
 cs.configure(RJFF)
+# true tracks of RJFF's runway 16/34 (airports.json)
+H16 = RJFF["runways"][0]["true_track"]
+H34 = (H16 + 180.0) % 360.0
 
 T0 = 1_800_000_000.0
 
@@ -105,26 +108,26 @@ class Movements(unittest.TestCase):
         self.assertAlmostEqual(cross, -0.5, places=6)
 
     def test_arrival_runway_16(self):
-        doc = pass_trace(T0, -5.5, 0.5, 950, 0, 157.0, -700)
+        doc = pass_trace(T0, -5.5, 0.5, 950, 0, H16, -700)
         ev = cs.detect_movements(doc)
         self.assertEqual(len(ev), 1)
         self.assertEqual(ev[0][1:3], ("arr", "16"))
 
     def test_departure_runway_34(self):
-        ev = cs.detect_movements(pass_trace(T0, 0.5, -5.5, 0, 950, 337.0, 2500))
+        ev = cs.detect_movements(pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500))
         self.assertEqual([e[1:3] for e in ev], [("dep", "34")])
 
     def test_crosswind_crab_within_tolerance(self):
-        ev = cs.detect_movements(pass_trace(T0, -5, 0, 900, 0, 157.0 + 15, -600))
+        ev = cs.detect_movements(pass_trace(T0, -5, 0, 900, 0, H16 + 15, -600))
         self.assertEqual([e[1:3] for e in ev], [("arr", "16")])
 
     def test_not_movements(self):
         cases = {
-            "overflight above the gate": pass_trace(T0, -5, 5, 3000, 3000, 157.0, -500),
+            "overflight above the gate": pass_trace(T0, -5, 5, 3000, 3000, H16, -500),
             "crossing the runway": pass_trace(T0, -1, 1, 800, 800, 70.0, -500),
-            "parallel but 2 km off the centreline": pass_trace(T0, -5, 0, 900, 0, 157.0, -700, cross=2.0),
-            "level flight": pass_trace(T0, -5, 0, 800, 800, 157.0, 0),
-            "beyond the gate": pass_trace(T0, -12, -7, 900, 600, 157.0, -700),
+            "parallel but 2 km off the centreline": pass_trace(T0, -5, 0, 900, 0, H16, -700, cross=2.0),
+            "level flight": pass_trace(T0, -5, 0, 800, 800, H16, 0),
+            "beyond the gate": pass_trace(T0, -12, -7, 900, 600, H16, -700),
         }
         for label, doc in cases.items():
             with self.subTest(label):
@@ -134,38 +137,38 @@ class Movements(unittest.TestCase):
         # departures from 16 are often first heard well above 1000 ft
         self.assertEqual(cs.classify_point(gate_point(0, 2.5, 0, 1500, 150.0, 2500)), ("dep", "16"))
         self.assertIsNone(cs.classify_point(gate_point(0, 2.5, 0, 2100, 150.0, 2500)))
-        self.assertIsNone(cs.classify_point(gate_point(0, -3, 0, 1100, 157.0, -700)))
-        self.assertEqual(cs.classify_point(gate_point(0, -3, 0, 1000, 157.0, -700)), ("arr", "16"))
+        self.assertIsNone(cs.classify_point(gate_point(0, -3, 0, 1100, H16, -700)))
+        self.assertEqual(cs.classify_point(gate_point(0, -3, 0, 1000, H16, -700)), ("arr", "16"))
         # the correction applies to both
         self.assertIsNone(cs.classify_point(gate_point(0, 2.5, 0, 1600, 150.0, 2500), 450.0))
 
     def test_ground_altitude_and_missing_rate(self):
-        self.assertIsNone(cs.classify_point(gate_point(0, 0, 0, "ground", 157.0, -700)))
-        p = gate_point(0, -2, 0, 500, 157.0, None)
+        self.assertIsNone(cs.classify_point(gate_point(0, 0, 0, "ground", H16, -700)))
+        p = gate_point(0, -2, 0, 500, H16, None)
         p[11] = -800  # geom_rate fallback
         self.assertEqual(cs.classify_point(p), ("arr", "16"))
         self.assertIsNone(cs.classify_point([0, None, None]))
 
     def test_go_around_counts_both(self):
-        doc = pass_trace(T0, -5, -1, 900, 200, 157.0, -700)
-        append_pass(doc, pass_trace(T0 + 100, -1, 4, 200, 900, 157.0, 1500))
+        doc = pass_trace(T0, -5, -1, 900, 200, H16, -700)
+        append_pass(doc, pass_trace(T0 + 100, -1, 4, 200, 900, H16, 1500))
         self.assertEqual([e[1] for e in cs.detect_movements(doc)], ["arr", "dep"])
 
     def test_gusty_final_is_not_a_departure(self):
         # JFS91 2026-11-20 (290/15G25KT): steady descent to land on 34, the
         # baro rate flipping to +320..+832 fpm on single points
         rates = [-640, 320, -1152, 512, -896, 832, -1856, 512, -576, -960]
-        pts = [gate_point(i * 4.0, 4.0 - i * 0.4, 0, 700 - i * 30, 337.0, r) for i, r in enumerate(rates)]
+        pts = [gate_point(i * 4.0, 4.0 - i * 0.4, 0, 700 - i * 30, H34, r) for i, r in enumerate(rates)]
         doc = {"icao": "87cde5", "timestamp": T0, "trace": pts}
         self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("arr", "34")])
 
     def test_departure_needs_a_real_climb(self):
         # level at 1500 ft with a climbing rate: not a departure
-        self.assertEqual(cs.detect_movements(pass_trace(T0, 0.5, 5, 1500, 1500, 157.0, 800)), [])
+        self.assertEqual(cs.detect_movements(pass_trace(T0, 0.5, 5, 1500, 1500, H16, 800)), [])
         # a climb at the very end of the trace is confirmed by a later run
-        doc = pass_trace(T0, 0.5, 2, 300, 350, 157.0, 1500, n=3)
+        doc = pass_trace(T0, 0.5, 2, 300, 350, H16, 1500, n=3)
         self.assertEqual(cs.detect_movements(doc), [])
-        append_pass(doc, pass_trace(T0 + 15, 2.5, 4, 600, 900, 157.0, 1500, n=3))
+        append_pass(doc, pass_trace(T0 + 15, 2.5, 4, 600, 900, H16, 1500, n=3))
         self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("dep", "16")])
         self.assertEqual(cs.detect_movements(doc)[0][0], T0)
 
@@ -192,13 +195,13 @@ class Movements(unittest.TestCase):
             cs.TRACES_DIR = d
             try:
                 os.makedirs(os.path.join(d, "ef"))
-                full = pass_trace(T0, -5, 0, 900, 0, 157.0, -700)
+                full = pass_trace(T0, -5, 0, 900, 0, H16, -700)
                 with open(os.path.join(d, "ef", "trace_full_abcdef.json"), "wb") as f:
                     f.write(gzip.compress(json.dumps(full).encode()))
-                recent = pass_trace(T0 + 7200, 0, -5, 0, 900, 337.0, 2000)
+                recent = pass_trace(T0 + 7200, 0, -5, 0, 900, H34, 2000)
                 with open(os.path.join(d, "ef", "trace_recent_abcdef.json"), "w") as f:
                     json.dump(recent, f)
-                p = gate_point(0, -1, 0, 300, 337.0, 2000)
+                p = gate_point(0, -1, 0, 300, H34, 2000)
                 snapshot = {"now": T0 + 7300, "aircraft": [
                     {"hex": "abcdef", "seen": 0, "lat": p[1], "lon": p[2], "alt_baro": 300},
                     {"hex": "123456", "seen": 0, "lat": 35.0, "lon": 139.0, "alt_baro": 1000},
@@ -225,13 +228,13 @@ class Candidates(unittest.TestCase):
                 os.makedirs(os.path.join(d, "7c"))
                 st = cs.load_state("/nonexistent", T0)
                 st["movements"] = []
-                p = gate_point(0, -1, 0, 300, 337.0, 0)
+                p = gate_point(0, -1, 0, 300, H34, 0)
                 ground = {"now": T0, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
                                                    "alt_baro": "ground"}]}
                 cs.update_movements(st, ground)
                 self.assertEqual(st["candidates"], {"86837c": T0})
                 with open(os.path.join(d, "7c", "trace_recent_86837c.json"), "w") as f:
-                    json.dump(pass_trace(T0 + 10, 0, -5, 300, 2000, 337.0, 3500), f)
+                    json.dump(pass_trace(T0 + 10, 0, -5, 300, 2000, H34, 3500), f)
                 high = {"now": T0 + 60, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
                                                       "alt_baro": 7000}]}
                 self.assertEqual(cs.candidates(high), [])
@@ -246,7 +249,7 @@ class Candidates(unittest.TestCase):
     def test_departure_first_heard_in_the_climb(self):
         # 86803b 2026-11-19: first heard at 1275 ft, at 3150 ft 8.3 km out at
         # the next run; never near and low before
-        p = gate_point(0, 8.3, 0, 3150, 157.0, 2400)
+        p = gate_point(0, 8.3, 0, 3150, H16, 2400)
         snap = {"now": T0, "aircraft": [{"hex": "86803b", "seen": 0, "lat": p[1], "lon": p[2], "alt_baro": 3150}]}
         self.assertEqual(cs.candidates(snap), ["86803b"])
 
@@ -270,8 +273,8 @@ def with_flight(doc, flight):
 
 class GoAround(unittest.TestCase):
     def go_around_doc(self, t0=T0):
-        doc = pass_trace(t0, -5, -1, 900, 200, 157.0, -700)
-        append_pass(doc, pass_trace(t0 + 100, -1, 4, 200, 900, 157.0, 1500))
+        doc = pass_trace(t0, -5, -1, 900, 200, H16, -700)
+        append_pass(doc, pass_trace(t0 + 100, -1, 4, 200, 900, H16, 1500))
         return with_flight(doc, "HGB308")
 
     def test_events_carry_the_callsign(self):
@@ -301,7 +304,7 @@ class GoAround(unittest.TestCase):
 
     def test_second_approach_after_go_around_counts(self):
         doc = self.go_around_doc()
-        append_pass(doc, pass_trace(T0 + 700, -5, 0, 900, 0, 157.0, -700))
+        append_pass(doc, pass_trace(T0 + 700, -5, 0, 900, 0, H16, -700))
         self.assertEqual([e[1] for e in cs.detect_movements(doc)], ["arr", "dep", "arr"])
         # the same three seen again by a later run are not added twice
         st = cs.load_state("/nonexistent", T0)
@@ -389,13 +392,13 @@ class Wind(unittest.TestCase):
         self.assertIsNone(cs.parse_metar_wind(None))
 
     def test_wind_components(self):
-        # 18 kt from 337 on runway 34: all headwind
-        self.assertEqual(cs.wind_components({"dir": 337, "spd": 18}, "34"), {"head": 18, "cross": 0, "from": None})
+        # 18 kt from 330 on runway 34 (330.3 true): all headwind
+        self.assertEqual(cs.wind_components({"dir": 330, "spd": 18}, "34"), {"head": 18, "cross": 0, "from": None})
         # same wind on 16: all tailwind
-        self.assertEqual(cs.wind_components({"dir": 337, "spd": 18}, "16")["head"], -18)
-        # 90 deg right of runway 34's heading
-        self.assertEqual(cs.wind_components({"dir": 67, "spd": 10}, "34"), {"head": 0, "cross": 10, "from": "R"})
-        self.assertEqual(cs.wind_components({"dir": 247, "spd": 10}, "34")["from"], "L")
+        self.assertEqual(cs.wind_components({"dir": 330, "spd": 18}, "16")["head"], -18)
+        # 90 deg right of runway 34's track
+        self.assertEqual(cs.wind_components({"dir": 60, "spd": 10}, "34"), {"head": 0, "cross": 10, "from": "R"})
+        self.assertEqual(cs.wind_components({"dir": 240, "spd": 10}, "34")["from"], "L")
         self.assertIsNone(cs.wind_components({"dir": None, "spd": 3}, "34"))
         self.assertIsNone(cs.wind_components(None, "16"))
 
@@ -409,7 +412,7 @@ class History(unittest.TestCase):
         return st
 
     def doc(self, t_to=T0 + 3600):
-        pts = [gate_point(dt, -5 + dt / 600, 0, 900, 337.0, -500) for dt in range(-600, int(t_to - T0), 5)]
+        pts = [gate_point(dt, -5 + dt / 600, 0, 900, H34, -500) for dt in range(-600, int(t_to - T0), 5)]
         return {"icao": "789288", "timestamp": T0, "trace": pts}
 
     def test_new_entry_with_fresh_metar(self):
@@ -561,9 +564,10 @@ class History(unittest.TestCase):
         self.assertEqual(cs.airframe_nth(hist), {"a": 1, "b": 1, "c": 2})
 
     def test_extract_track_ground_and_bounds(self):
+        C_LAT, C_LON = cs.RUNWAYS[0]["lat"], cs.RUNWAYS[0]["lon"]     # the track's origin
         doc = {"timestamp": T0, "trace": [
-            [0, cs.ARP_LAT, cs.ARP_LON, "ground"], [3, cs.ARP_LAT, cs.ARP_LON, 100],
-            [20, cs.ARP_LAT, cs.ARP_LON, 200], [40, None, None, 300], [500, cs.ARP_LAT, cs.ARP_LON, 400]]}
+            [0, C_LAT, C_LON, "ground"], [3, C_LAT, C_LON, 100],
+            [20, C_LAT, C_LON, 200], [40, None, None, 300], [500, C_LAT, C_LON, 400]]}
         self.assertEqual(cs.extract_track(doc, T0, T0 + 100), [[0, 0.0, 0.0, 0], [20, 0.0, 0.0, 200]])
         self.assertEqual(cs.extract_track(None, T0, T0 + 1), [])
 
@@ -606,7 +610,8 @@ class AircraftDb(unittest.TestCase):
             self.assertEqual([(g["reg"], g["type"]) for g in out], [(None, None), ("kept", "B738")])
 
     def test_config_key(self):
-        doc = tomllib.load(open(RJFF_TOML, "rb"))
+        with open(RJFF_TOML, "rb") as f:
+            doc = tomllib.load(f)
         doc.setdefault("paths", {})["aircraft_db"] = "/usr/local/share/tar1090/git-db/db"
         self.assertEqual(cs.parse_config(doc)["paths"]["aircraft_db"], "/usr/local/share/tar1090/git-db/db")
 
@@ -647,7 +652,7 @@ class Qnh(unittest.TestCase):
 
     def test_deep_low_needs_the_correction(self):
         # 980 hPa: on short final at 300-500 ft the aircraft reports ~1200-1400 ft
-        doc = pass_trace(T0, -5, 0, 1400, 1150, 157.0, -700)
+        doc = pass_trace(T0, -5, 0, 1400, 1150, H16, -700)
         self.assertEqual(cs.detect_movements(doc), [])
         ev = cs.detect_movements(doc, cs.qnh_offset_ft(980.0))
         self.assertEqual([e[1:3] for e in ev], [("arr", "16")])
@@ -759,9 +764,69 @@ class Config(unittest.TestCase):
                          (("09", "27"), 90.0, 10.0, 20.0, 6.0))
 
     def test_rjff_example(self):
+        # icao only: the rest comes from the bundled airports.json
         self.assertEqual(RJFF["airport"]["icao"], "RJFF")
+        self.assertEqual(RJFF["airport"]["elevation_ft"], 32.0)
         self.assertEqual([r["ends"] for r in RJFF["runways"]], [("16", "34")])
-        self.assertEqual(cs.RUNWAY_HDG, {"16": 157.0, "34": 337.0})
+        self.assertEqual(cs.RUNWAY_HDG, {"16": 150.3, "34": 330.3})
+        self.assertEqual(RJFF["runways"][0]["gate_cross_km"], 1.1)
+
+    AIRPORTS = {"XXXX": {"arp": [10.0, 20.0], "elevation_ft": 2182, "members": "ignored",
+                         "runways": [{"ends": ["18", "36"], "true_track": 172.3, "center": [10.1, 20.0],
+                                      "gate_cross_km": 1.2, "members": ["18L/36R", "18R/36L"]}]}}
+
+    def test_airport_from_airports_json(self):
+        c = cs.parse_config({"airport": {"icao": "XXXX"}}, self.AIRPORTS)
+        self.assertEqual((c["airport"]["arp"], c["airport"]["elevation_ft"]), ([10.0, 20.0], 2182.0))
+        rw, = c["runways"]
+        self.assertEqual((rw["ends"], rw["true_track"], rw["lat"], rw["gate_cross_km"], rw["gate_along_km"]),
+                         (("18", "36"), 172.3, 10.1, 1.2, 6.0))
+
+    def test_configuration_overrides_airports_json(self):
+        c = cs.parse_config(self.BASE, self.AIRPORTS)
+        self.assertEqual([r["ends"] for r in c["runways"]], [("09", "27")])
+        self.assertEqual(c["airport"]["elevation_ft"], 2182.0)       # not given: from the entry
+        c = cs.parse_config(dict(self.BASE, airport={"icao": "XXXX", "elevation_ft": 0}), self.AIRPORTS)
+        self.assertEqual((c["airport"]["elevation_ft"], c["airport"]["arp"]), (0.0, [10.0, 20.0]))
+        # an airport not in airports.json needs everything, but elevation defaults to 0
+        c = cs.parse_config(dict(self.BASE, airport={"icao": "YYYY", "arp": [1, 2]}), self.AIRPORTS)
+        self.assertEqual(c["airport"]["elevation_ft"], 0.0)
+        for doc in ({"airport": {"icao": "YYYY"}}, {"airport": {"icao": "YYYY", "arp": [1, 2]}},
+                    {"airport": {"icao": "XXXX"}, "runway": []}):
+            with self.subTest(doc), self.assertRaises(cs.ConfigError):
+                cs.parse_config(doc, self.AIRPORTS)
+        with self.assertRaises(cs.ConfigError):
+            cs.parse_config({"airport": {"icao": "XXXX"}}, {"XXXX": {"arp": [1, 2], "runways": []}})
+
+    def test_load_airports(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "airports.json")
+            with open(p, "w") as f:
+                json.dump({"airports": self.AIRPORTS}, f)
+            self.assertEqual(cs.load_airports(p), self.AIRPORTS)
+            c = cs.parse_config({"airport": {"icao": "XXXX"}, "paths": {"airports": p}})
+            self.assertEqual(c["airport"]["elevation_ft"], 2182.0)
+            for bad in ("{", '{"x": 1}', '{"airports": []}'):
+                with open(p, "w") as f:
+                    f.write(bad)
+                with self.subTest(bad), self.assertRaises(cs.ConfigError):
+                    cs.load_airports(p)
+            # a broken file is an error only when the airport data is needed
+            self.assertEqual(cs.parse_config(dict(self.BASE, paths={"airports": p}))["airport"]["elevation_ft"], 0.0)
+            with self.assertRaises(cs.ConfigError):
+                cs.load_airports(os.path.join(d, "missing.json"))
+            search = cs.AIRPORTS_SEARCH
+            try:
+                cs.AIRPORTS_SEARCH = [os.path.join(d, "none.json")]
+                self.assertEqual(cs.load_airports(), {})
+            finally:
+                cs.AIRPORTS_SEARCH = search
+
+    def test_bundled_airports_json_is_valid(self):
+        for icao in cs.load_airports():
+            with self.subTest(icao):
+                c = cs.parse_config({"airport": {"icao": icao}})
+                self.assertTrue(c["runways"])
 
     def test_errors(self):
         bad = [
@@ -789,6 +854,77 @@ class Config(unittest.TestCase):
             self.assertIn(p, str(e.exception))
             with self.assertRaises(cs.ConfigError):
                 cs.load_config(os.path.join(d, "missing.toml"))
+
+
+class Elevation(unittest.TestCase):
+    def test_main_measures_the_gates_above_the_airport(self):
+        seen = []
+        update = cs.update_movements
+        def spy(state, snapshot, alt_offset=0.0):
+            seen.append(alt_offset)
+            update(state, snapshot, alt_offset)
+        cs.update_movements = spy
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                HistoryFile().run_main(d, "[]")
+        finally:
+            cs.update_movements = update
+        self.assertEqual(seen, [-32.0])        # no usable METAR: just the elevation
+
+
+class CheckRunways(unittest.TestCase):
+    def run_check(self, docs):
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i, doc in enumerate(docs):
+                p = os.path.join(d, f"trace_full_{i:06x}.json")
+                with open(p, "wb") as f:
+                    f.write(gzip.compress(json.dumps(doc).encode()))
+                paths.append(p)
+            return cs.check_runways(paths)
+
+    def skewed(self, t0, deg, cross, along_from, along_to, n=20):
+        """A pass deg off the configured axis, centred cross km to the right."""
+        doc = pass_trace(t0, along_from, along_to, 900, 300, 150, -700, n=n)
+        for p, i in zip(doc["trace"], range(n)):
+            along = along_from + (along_to - along_from) * i / (n - 1)
+            x = cross + along * math.tan(math.radians(deg))
+            q = gate_point(p[0], along, x, p[3], p[5], p[7])
+            p[1], p[2] = q[1], q[2]
+        return doc
+
+    def test_matching_runway(self):
+        r, = self.run_check([pass_trace(T0, 5, -1, 900, 100, 150, -700), pass_trace(T0, -1, 5, 100, 900, 330, 900)])
+        self.assertEqual((r["passes"], r["measured"], r["offset_km"]), (2, 150.3, 0.0))
+        self.assertIn(": OK", cs.check_report([r])[0])
+
+    def test_misaligned_runway_is_reported(self):
+        r, = self.run_check([self.skewed(T0, 6.0, -0.3, 5, -1), self.skewed(T0, 6.0, -0.3, -1, 5)])
+        self.assertEqual(r["passes"], 2)
+        self.assertAlmostEqual(r["measured"], 156.3, delta=0.15)
+        self.assertAlmostEqual(r["offset_km"], -0.3 + 2 * math.tan(math.radians(6)), delta=0.02)
+        line = cs.check_report([r])[0]
+        self.assertIn("(+6.0)", line)
+        self.assertTrue(line.endswith("CHECK"))
+
+    def test_what_is_not_a_pass(self):
+        docs = [
+            pass_trace(T0, 5, 4, 900, 800, 150, -700),                 # too short
+            pass_trace(T0, 5, -1, 3000, 2500, 150, -700),              # too high
+            pass_trace(T0, 5, -1, 900, 100, 150, -700, n=4),           # too few points
+            self.skewed(T0, 40.0, 0.0, 2, -2),                         # crossing, not along
+            {"timestamp": T0, "trace": "bad"}, None,
+        ]
+        r, = self.run_check(docs)
+        self.assertEqual(r["passes"], 0)
+        self.assertIn("no pass", cs.check_report([r])[0])
+
+    def test_gap_splits_a_pass(self):
+        doc = pass_trace(T0, 5, -1, 900, 100, 150, -700)
+        for p in doc["trace"][10:]:
+            p[0] += 120
+        r, = self.run_check([doc])
+        self.assertEqual(r["passes"], 2)
 
 
 class TwoRunways(unittest.TestCase):

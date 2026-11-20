@@ -33,15 +33,35 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 
 ```sh
 sudo install -m 0755 toganomon.py /usr/local/bin/
+sudo install -D -m 0644 airports.json /usr/local/share/toganomon/airports.json
 sudo cp examples/rjff.toml /etc/toganomon.toml   # then edit it for your airport
 # every minute, e.g. in /etc/crontab:
 # * * * * * root /usr/local/bin/toganomon.py >> /var/log/toganomon.log 2>&1
 ```
 
-The configuration describes the airport reference point, one `[[runway]]`
-per runway (its two designators, the true track of the first one and the
-gate around its extended centreline), the gate altitudes and the file paths.
-See [`examples/rjff.toml`](examples/rjff.toml).
+For an airport in [`airports.json`](airports.json) the configuration needs
+only its ICAO code: the reference point, the elevation and the runway gates
+come from there. For any other airport it describes the reference point,
+the elevation and one `[[runway]]` per runway or group of close parallel
+runways (its two designators, the true track of the first one and the gate
+around its extended centreline). Either way it also holds the gate
+altitudes (above the airport) and the file paths. See
+[`examples/rjff.toml`](examples/rjff.toml).
+
+### Airport data
+
+`airports.json` holds only Fukuoka (RJFF) for now. More airports are
+welcome as pull requests:
+
+1. Draft the entry from [OurAirports](https://ourairports.com/data/)
+   (public domain) with `tools/make_airports.py airports.csv runways.csv
+   <ICAO>`. It takes the true track from the threshold positions and puts
+   parallel runways less than 1 km apart into one gate.
+2. Check it against real traffic: run `toganomon.py --check-runways` on a
+   receiver that sees the airport's approaches. It measures the passes
+   through each gate (low, straight, along the runway) and prints the
+   measured true track and centreline offset with OK or CHECK.
+3. Put the result of the check in the entry's `checked`.
 
 [`docs/INSTALL.md`](docs/INSTALL.md) has the full walkthrough: preparing
 readsb (also on a host without an SDR), every configuration key, METAR,
