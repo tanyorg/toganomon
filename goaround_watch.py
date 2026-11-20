@@ -34,7 +34,9 @@ aircraft on the same runway within the go-around window; a real turnaround
 takes far longer. Arrivals slower than min_gs_kt or of excluded emitter
 categories (rotorcraft, A7) are not paired. Each new go-around is appended
 to the optional log as one tab-separated line (UTC time, callsign, runway,
-hex).
+hex). Each new movement (arrival or departure) can likewise be appended to
+the optional movements log, the long-term record of how many aircraft used
+which runway (the state keeps only the last 24 hours).
 
 Every go-around is also kept forever in the history file and published as
 the go-arounds JSON for the web view, with the METAR wind at detection time
@@ -128,6 +130,7 @@ DEFAULTS = {
         "go_arounds": "/var/www/html/goaround-watch/go-arounds.json",
         "metar": None,
         "log": None,
+        "movements_log": None,
     },
 }
 RUNWAY_DEFAULTS = {"gate_along_km": 6.0, "gate_cross_km": 1.0, "length_m": None}
@@ -215,6 +218,7 @@ def configure(cfg):
     global ICAO, ARP_LAT, ARP_LON, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
     global RATE_FPM, GA_WINDOW_S, GA_MIN_GS_KT, GA_EXCLUDE_CATEGORIES, CANDIDATE_KM, CANDIDATE_ALT_FT
     global AIRCRAFT_JSON, TRACES_DIR, STATE_PATH, GA_HISTORY, OUT_PATH, GA_OUT, METAR_PATH, GA_LOG
+    global MOVES_LOG
     ICAO = cfg["airport"]["icao"]
     ARP_LAT, ARP_LON = cfg["airport"]["arp"]
     RUNWAYS = cfg["runways"]
@@ -230,7 +234,7 @@ def configure(cfg):
     CANDIDATE_KM, CANDIDATE_ALT_FT = c["radius_km"], c["max_alt_ft"]
     AIRCRAFT_JSON, TRACES_DIR, STATE_PATH = p["aircraft"], p["traces"], p["state"]
     GA_HISTORY, OUT_PATH, GA_OUT = p["history"], p["summary"], p["go_arounds"]
-    METAR_PATH, GA_LOG = p["metar"], p["log"]
+    METAR_PATH, GA_LOG, MOVES_LOG = p["metar"], p["log"], p["movements_log"]
 
 
 def write_atomic(path, text, mode=0o644):
@@ -528,6 +532,26 @@ def log_line(ga):
     return f"{when}\t{ga.get('flight') or '-'}\t{ga['rwy']}\t{ga['hex']}\n"
 
 
+def movement_key(m):
+    return (m[0], m[1], m[3])
+
+
+def movement_lines(moves, known):
+    """Log lines for the movements whose key is not in known, oldest first.
+    One tab-separated line each: UTC time, arr/dep, runway, hex, callsign,
+    ground speed (kt), emitter category; "-" for an unknown value."""
+    out = []
+    for m in sorted(moves, key=lambda m: m[0]):
+        if movement_key(m) in known:
+            continue
+        t, kind, rwy, hx = m[:4]
+        flight, gs, cat = (list(m[4:7]) + [None] * 3)[:3]
+        when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+        out.append("\t".join([when, kind, rwy, hx, flight or "-",
+                              str(round(gs)) if isinstance(gs, (int, float)) else "-", cat or "-"]) + "\n")
+    return out
+
+
 def update_go_arounds(state, now, log=None):
     """Record go-arounds not seen before; returns the new ones."""
     known = state.setdefault("go_arounds", [])
@@ -790,7 +814,16 @@ def main(argv=None):
     metar = read_text(METAR_PATH) if METAR_PATH else None
     qnh = parse_metar_qnh(metar, now)
     state = update(load_state(STATE_PATH, now), snapshot)
+    # A rebuilt state (first run, or the state was lost) logs the rebuilt
+    # 24 hours again: a reader may see a movement twice after that.
+    known = {movement_key(m) for m in state.get("movements", []) if isinstance(m, list) and len(m) >= 4}
     update_movements(state, snapshot, qnh_offset_ft(qnh))
+    if MOVES_LOG:
+        try:
+            with open(MOVES_LOG, "a", encoding="utf-8") as log:
+                log.writelines(movement_lines(state["movements"], known))
+        except OSError as e:
+            print(f"[{stamp}] cannot write {MOVES_LOG}: {e}", file=sys.stderr)
     try:
         if GA_LOG:
             with open(GA_LOG, "a", encoding="utf-8") as log:
