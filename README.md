@@ -36,6 +36,10 @@ per runway (its two designators, the true track of the first one and the
 gate around its extended centreline), the gate altitudes and the file paths.
 See [`examples/rjff.toml`](examples/rjff.toml).
 
+[`docs/INSTALL.md`](docs/INSTALL.md) has the full walkthrough: preparing
+readsb (also on a host without an SDR), every configuration key, METAR,
+the aircraft database, a dedicated user, the web view and troubleshooting.
+
 ## Output
 
 - `summary` (JSON): aircraft received in the last 24 h, arrivals, departures,
@@ -78,6 +82,20 @@ that straight line.
       // storage: {load(), save(obj)}, pollMs
   });
   ```
+
+## Known limitations
+
+- Only an aircraft that came down low through the gate and then climbed is
+  counted, to avoid false detections. An approach abandoned before or above
+  the gate is no arrival, so it is no go-around either (it counts as one
+  departure). Example: TWB207 on 2026-11-19 began its climb 8 km short of
+  RWY16 at 1175 ft and never entered the gate (6 km along, 1000 ft and
+  below).
+- What is not received cannot be judged. Where the ground and low altitudes
+  are not received, a departure may first be seen already climbing (which
+  is why the candidate altitude is well above the departure gate).
+- A go-around is "probable": it is inferred from ADS-B alone, without ATC
+  audio or any official source.
 
 ## Tests
 
