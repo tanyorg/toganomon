@@ -72,8 +72,12 @@ later (see `done` in section 7).
 
 ```sh
 sudo install -m 0755 toganomon.py /usr/local/bin/
+sudo install -D -m 0644 airports.json /usr/local/share/toganomon/airports.json
 sudo install -m 0644 examples/rjff.toml /etc/toganomon.toml    # edit it as in section 4
 ```
+
+`airports.json` is looked for next to the script, then in
+`/usr/local/share/toganomon/` (or set `[paths] airports`).
 
 The user that runs it must be able to read readsb's files (readsb writes
 them world-readable) and to write the outputs. It need not be root. A
@@ -99,27 +103,39 @@ keys take the defaults shown below.
 ```toml
 [airport]
 icao = "RJFF"
-arp = [33.585, 130.451]     # aerodrome reference point (lat, lon), e.g. from AIP AD 2.2
+# arp = [33.585899, 130.451004]  # aerodrome reference point (lat, lon), e.g. from AIP AD 2.2
+# elevation_ft = 32              # aerodrome elevation; the gate altitudes are above it
 ```
 
-### `[[runway]]` (one or more, required)
+For an airport in `airports.json`, `icao` is all it takes: `arp`,
+`elevation_ft` and the runways come from its entry, and anything given
+here wins over it. For another airport `arp` and `[[runway]]` are
+required, and `elevation_ft` is 0 unless given.
 
-One per runway, or per pair of closely spaced parallel runways.
+### `[[runway]]` (one or more; optional for an airport in airports.json)
+
+One per runway, or per group of closely spaced parallel runways (one gate
+for both, ends without L/R).
 
 ```toml
 [[runway]]
-ends = ["16", "34"]         # the two designators
-true_track = 157.0          # TRUE track when landing on the first of ends (not magnetic)
-center = [33.585, 130.451]  # default: the ARP; with several runways, each runway's centre
-gate_along_km = 6.0         # from the centre, each way along the runway
-gate_cross_km = 1.0         # from the extended centreline, each side
-length_m = 2800             # for display only
+ends = ["16", "34"]              # the two designators
+true_track = 150.3               # TRUE track when landing on the first of ends (not magnetic)
+center = [33.586069, 130.4492]   # default: the ARP; with several runways, each one's centre
+gate_along_km = 6.0              # from the centre, each way along the runway
+gate_cross_km = 1.1              # from the extended centreline, each side
+length_m = 2800                  # for display only
 ```
 
-- `true_track`: take the true bearing from the AIP. The magnetic heading
-  (designator × 10) is off by the variation.
+- `true_track`: the magnetic heading (designator × 10) is off by the
+  variation, about 7° in Japan. Take the true bearing from the AIP, or from
+  the two threshold positions (`tools/make_airports.py` does this with
+  OurAirports data).
 - The gate is a box around the extended centreline. Points inside it,
   flying along the runway and below the `[gate]` altitudes, are examined.
+- Given `[[runway]]` entries replace the runways of `airports.json`
+  entirely.
+- Check them with `--check-runways` (section 7).
 
 ### `[gate]` (defaults)
 
@@ -131,8 +147,9 @@ track_tol_deg = 20.0        # tolerance against the runway direction
 rate_fpm = 200              # vertical rate that counts as descending / climbing
 ```
 
-Altitudes are ADS-B pressure altitudes, corrected with the QNH when a METAR
-is available (section 5). Review these values at a high-elevation airport.
+The altitudes are heights above the airport elevation. They are compared
+with ADS-B pressure altitudes, corrected with the QNH when a METAR is
+available (section 5).
 
 A departure point also needs a real climb: the altitude must rise 200 ft
 within the next 30 s. A single noisy vertical rate on a gusty final then
@@ -153,7 +170,7 @@ exclude_categories = ["A7"] # emitter categories to ignore (A7 = rotorcraft)
 ```toml
 [candidates]
 radius_km = 15.0            # only read the tracks of aircraft within this distance of the airport
-max_alt_ft = 6000           # ... and at or below this altitude (and for 5 minutes after)
+max_alt_ft = 6000           # ... and at or below this height above the airport (and for 5 minutes after)
 ```
 
 Keep `max_alt_ft` well above the departure gate altitude. A departure first
@@ -174,6 +191,7 @@ go_arounds = "/var/www/html/toganomon/go-arounds.json"
 # log = "/var/log/toganomon/events.log"            # one line per go-around
 # movements_log = "/var/log/toganomon/movements.log" # one line per arrival / departure
 # aircraft_db = "/usr/local/share/tar1090/git-db/db"     # tar1090-db: registration and type
+# airports = "/usr/local/share/toganomon/airports.json"  # default: next to the script, then this
 ```
 
 Keep `state` and `history` on persistent storage (not `/run` or a tmpfs).
@@ -249,6 +267,23 @@ own way.
   If `arrivals` and `departures` grow and `runway` shows the runway in use,
   detection works. If they stay 0 for hours, review `true_track`, `center`,
   the gate size and the gate altitudes.
+- Check the runways against the traffic of the last 24 hours (once readsb
+  has some; it only reads `trace_full_*` and writes nothing):
+
+  ```sh
+  sudo -u toganomon /usr/local/bin/toganomon.py -c /etc/toganomon.toml --check-runways
+  ```
+
+  ```
+  RJFF 16/34: true_track 150.3, measured 150.4 (+0.1) from 253 passes, centreline 0.11 km left of the centre (looking towards 16): OK
+  ```
+
+  A pass is an aircraft low (below 1500 ft above the airport) and straight
+  along the runway through its gate. CHECK means the measured true track is
+  more than 1° off, or the traffic runs more than 0.2 km beside the
+  centre: correct `true_track` or `center`. With a `true_track` of 157.0
+  (the magnetic heading) the same airport shows `measured 150.4 (-6.6)`.
+  Exit code 1: a runway had no pass at all.
 - Go-arounds are listed in `go-arounds.json`, newest first. The `outcome`
   of each (landed / went around again / did not land within 60 minutes) and
   its `track` are updated until the entry is settled (`done: true`). That
@@ -278,10 +313,10 @@ To embed the view in your own page, see "Web view" in the README.
 
 ## 9. Upgrading and removing
 
-- Upgrade: replace `toganomon.py`. The state and the history carry
+- Upgrade: replace `toganomon.py` and `airports.json`. The state and the history carry
   over.
 - Remove: the cron line, `/usr/local/bin/toganomon.py`,
-  `/etc/toganomon.toml` and the files in `[paths]`.
+  `/usr/local/share/toganomon/`, `/etc/toganomon.toml` and the files in `[paths]`.
 
 ## 10. Known limitations
 
