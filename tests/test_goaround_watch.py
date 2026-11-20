@@ -554,6 +554,11 @@ class History(unittest.TestCase):
         self.assertEqual(cs.airframe_nth(hist), {"a": 1, "b": 1, "c": 2, "d": 3, "e": 1})
         out = cs.public_history(hist, T0)["go_arounds"]
         self.assertEqual([(g["id"], g["nth"]) for g in out], [("e", 1), ("d", 3), ("c", 2), ("b", 1), ("a", 1)])
+        # the same airframe on another flight starts again at 1
+        hist = [{"id": "a", "hex": "aaaaaa", "flight": "ANA1077", "t": T0},
+                {"id": "b", "hex": "aaaaaa", "flight": "ANA1278", "t": T0 + 1800},
+                {"id": "c", "hex": "aaaaaa", "flight": "ANA1278", "t": T0 + 2400}]
+        self.assertEqual(cs.airframe_nth(hist), {"a": 1, "b": 1, "c": 2})
 
     def test_extract_track_ground_and_bounds(self):
         doc = {"timestamp": T0, "trace": [

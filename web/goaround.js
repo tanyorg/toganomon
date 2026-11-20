@@ -45,7 +45,7 @@
         return `${mm}/${dd} ${hm}`;
     }
 
-    // 2 -> '2ND': the same airframe's 2nd (3rd, ...) go-around within 2 hours.
+    // 2 -> '2ND': the 2nd (3rd, ...) go-around of the same airframe and callsign within 2 hours.
     function ordinal(n) {
         const s = (n % 100 >= 11 && n % 100 <= 13) ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' }[n % 10] || 'TH');
         return n + s;

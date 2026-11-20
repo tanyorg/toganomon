@@ -84,8 +84,8 @@ SEEN_S = 60
 # Refuse to count from an aircraft.json that readsb stopped updating.
 STALE_S = 120
 DEDUP_S = 20 * 60
-# A go-around within this long after the same airframe's previous one is
-# its 2nd (3rd, ...) in the public history.
+# A go-around within this long after the previous one of the same airframe
+# and callsign is its 2nd (3rd, ...) in the public history.
 SAME_AIRFRAME_S = 2 * 3600
 # A departure point counts only when the altitude really rises by
 # DEP_CONFIRM_FT within DEP_CONFIRM_S after it: in gusts the baro rate of an
@@ -834,13 +834,15 @@ def add_aircraft(history, db_dir):
 
 
 def airframe_nth(history):
-    """id -> 1 for an airframe's first go-around, 2 for one within
-    SAME_AIRFRAME_S after its previous go-around, and so on."""
+    """id -> 1 for a flight's first go-around, 2 for one of the same airframe
+    and callsign within SAME_AIRFRAME_S after its previous go-around, and so
+    on (the same airframe on its next flight starts again at 1)."""
     out, last = {}, {}
     for h in sorted(history, key=lambda h: h["t"]):
-        prev = last.get(h.get("hex")) if h.get("hex") else None
+        key = (h.get("hex"), h.get("flight"))
+        prev = last.get(key) if h.get("hex") else None
         n = prev[1] + 1 if prev and h["t"] - prev[0] <= SAME_AIRFRAME_S else 1
-        last[h.get("hex")] = (h["t"], n)
+        last[key] = (h["t"], n)
         out[h.get("id")] = n
     return out
 
