@@ -23,7 +23,9 @@ few seconds, `--write-json-globe-index`; trace_recent of every aircraft near
 and low now or within CANDIDATE_KEEP_S): a point inside a runway gate (a box
 around the extended centreline, tracking along the runway) that is
 descending below the arrival altitude is an arrival, climbing below the
-departure altitude a departure. One aircraft counts at most once per kind
+departure altitude a departure, but only once the altitude has really risen
+DEP_CONFIRM_FT within DEP_CONFIRM_S (the baro rate alone flips positive in
+gusts on final). One aircraft counts at most once per kind
 within DEDUP_S unless the other kind came in between (so arrival, go-around,
 arrival again all count). The runway is the one the last movement used. On
 the first run (no movements in the state yet) the last 24 hours are rebuilt
@@ -80,6 +82,12 @@ SEEN_S = 60
 # Refuse to count from an aircraft.json that readsb stopped updating.
 STALE_S = 120
 DEDUP_S = 20 * 60
+# A departure point counts only when the altitude really rises by
+# DEP_CONFIRM_FT within DEP_CONFIRM_S after it: in gusts the baro rate of an
+# aircraft on final flips above +rate_fpm for single points (JFS91
+# 2026-11-20, +320..+832 fpm while descending to land).
+DEP_CONFIRM_S = 30
+DEP_CONFIRM_FT = 200
 # An aircraft that was a candidate (near and low) stays one this long, so its
 # trace_recent is still read after it climbed out of the candidate box: a
 # fast departure goes from the runway to above max_alt_ft between two runs.
@@ -372,6 +380,19 @@ def _gs(p):
     return round(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _climb_confirmed(pts, i):
+    """True when a point within DEP_CONFIRM_S after pts[i] is at least
+    DEP_CONFIRM_FT above it (both pressure altitudes, so no QNH needed)."""
+    alt0 = pts[i][3]
+    for p in pts[i + 1:]:
+        if p[0] - pts[i][0] > DEP_CONFIRM_S:
+            break
+        alt = p[3] if len(p) > 3 else None
+        if isinstance(alt, (int, float)) and not isinstance(alt, bool) and alt - alt0 >= DEP_CONFIRM_FT:
+            return True
+    return False
+
+
 def detect_movements(doc, alt_offset=0.0):
     """readsb trace document -> [(time, kind, runway, callsign, ground speed kt,
     emitter category)]; the last three may be None.
@@ -383,13 +404,15 @@ def detect_movements(doc, alt_offset=0.0):
     out, last, flight, cat = [], {}, None, None
     if not isinstance(t0, (int, float)):
         return out
-    for p in doc.get("trace") or []:
-        if not isinstance(p, list) or not p or not isinstance(p[0], (int, float)):
-            continue
+    pts = [p for p in doc.get("trace") or []
+           if isinstance(p, list) and p and isinstance(p[0], (int, float))]
+    for i, p in enumerate(pts):
         flight = _flight(p) or flight
         cat = _category(p) or cat
         hit = classify_point(p, alt_offset)
         if not hit:
+            continue
+        if hit[0] == "dep" and not _climb_confirmed(pts, i):
             continue
         t = t0 + p[0]
         if t - last.get(hit[0], -1e18) < DEDUP_S:

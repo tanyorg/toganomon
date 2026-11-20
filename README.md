@@ -5,7 +5,9 @@ from the per-aircraft traces of [readsb](https://github.com/wiedehopf/readsb)
 (the decoder behind tar1090), and publishes them as JSON for a web view.
 
 A go-around is an arrival through a runway gate followed by a departure of
-the same aircraft on the same runway within a few minutes. Each one is kept
+the same aircraft on the same runway within a few minutes. A departure needs
+a real climb (200 ft within 30 s), not just a positive vertical rate, so a
+gusty final does not fake one. Each one is kept
 with the METAR wind, what happened next (landed / went around again / did not
 land) and a thinned track in runway coordinates.
 

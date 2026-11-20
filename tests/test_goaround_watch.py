@@ -151,6 +151,24 @@ class Movements(unittest.TestCase):
         append_pass(doc, pass_trace(T0 + 100, -1, 4, 200, 900, 157.0, 1500))
         self.assertEqual([e[1] for e in cs.detect_movements(doc)], ["arr", "dep"])
 
+    def test_gusty_final_is_not_a_departure(self):
+        # JFS91 2026-11-20 (290/15G25KT): steady descent to land on 34, the
+        # baro rate flipping to +320..+832 fpm on single points
+        rates = [-640, 320, -1152, 512, -896, 832, -1856, 512, -576, -960]
+        pts = [gate_point(i * 4.0, 4.0 - i * 0.4, 0, 700 - i * 30, 337.0, r) for i, r in enumerate(rates)]
+        doc = {"icao": "87cde5", "timestamp": T0, "trace": pts}
+        self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("arr", "34")])
+
+    def test_departure_needs_a_real_climb(self):
+        # level at 1500 ft with a climbing rate: not a departure
+        self.assertEqual(cs.detect_movements(pass_trace(T0, 0.5, 5, 1500, 1500, 157.0, 800)), [])
+        # a climb at the very end of the trace is confirmed by a later run
+        doc = pass_trace(T0, 0.5, 2, 300, 350, 157.0, 1500, n=3)
+        self.assertEqual(cs.detect_movements(doc), [])
+        append_pass(doc, pass_trace(T0 + 15, 2.5, 4, 600, 900, 157.0, 1500, n=3))
+        self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("dep", "16")])
+        self.assertEqual(cs.detect_movements(doc)[0][0], T0)
+
     def test_record_dedup_prune_and_summary(self):
         st = cs.load_state("/nonexistent", T0)
         cs.record_movements(st, "aaaaaa", [(T0, "arr", "16")], T0)
