@@ -1,5 +1,5 @@
-# goaround-watch configuration for Fukuoka (RJFF).
-# Copy to /etc/goaround-watch.toml and adjust the paths.
+# toganomon configuration for Fukuoka (RJFF).
+# Copy to /etc/toganomon.toml and adjust the paths.
 
 [airport]
 icao = "RJFF"
@@ -41,11 +41,11 @@ max_alt_ft = 6000
 [paths]
 aircraft = "/run/readsb/aircraft.json"
 traces = "/run/readsb/traces"
-state = "/var/lib/goaround-watch/state.json"
-history = "/var/lib/goaround-watch/go_arounds.json"
-summary = "/var/www/html/goaround-watch/summary.json"
-go_arounds = "/var/www/html/goaround-watch/go-arounds.json"
+state = "/var/lib/toganomon/state.json"
+history = "/var/lib/toganomon/go_arounds.json"
+summary = "/var/www/html/toganomon/summary.json"
+go_arounds = "/var/www/html/toganomon/go-arounds.json"
 # metar = "/var/www/html/metar.txt"   # raw METAR text for the QNH correction and wind
-# log = "/var/log/goaround-watch.log" # one line per go-around
-# movements_log = "/var/log/goaround-watch-movements.log" # one line per arrival/departure
+# log = "/var/log/toganomon-events.log" # one line per go-around
+# movements_log = "/var/log/toganomon-movements.log" # one line per arrival/departure
 # aircraft_db = "/usr/local/share/tar1090/git-db/db" # tar1090-db: registration and type

@@ -1,4 +1,4 @@
-# Installing and configuring goaround-watch
+# Installing and configuring toganomon
 
 ## 1. Requirements
 
@@ -19,7 +19,7 @@ python3 --version          # 3.11 or later
 
 ## 2. Preparing readsb
 
-goaround-watch only reads two kinds of files that readsb writes; it never
+toganomon only reads two kinds of files that readsb writes; it never
 talks to readsb.
 
 | File | readsb option | Used for |
@@ -71,8 +71,8 @@ later (see `done` in section 7).
 ## 3. Installation
 
 ```sh
-sudo install -m 0755 goaround_watch.py /usr/local/bin/
-sudo install -m 0644 examples/rjff.toml /etc/goaround-watch.toml    # edit it as in section 4
+sudo install -m 0755 toganomon.py /usr/local/bin/
+sudo install -m 0644 examples/rjff.toml /etc/toganomon.toml    # edit it as in section 4
 ```
 
 The user that runs it must be able to read readsb's files (readsb writes
@@ -80,15 +80,15 @@ them world-readable) and to write the outputs. It need not be root. A
 dedicated user, for example:
 
 ```sh
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin goaround
-sudo install -d -o goaround -g goaround -m 0755 /var/lib/goaround-watch /var/www/html/goaround-watch /var/log/goaround-watch
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin toganomon
+sudo install -d -o toganomon -g toganomon -m 0755 /var/lib/toganomon /var/www/html/toganomon /var/log/toganomon
 ```
 
 An output directory is created on the first run when its parent is
 writable (as root you need not create them). The state and the history are
 written 0600, the public JSON files 0644.
 
-## 4. Configuration (`/etc/goaround-watch.toml`)
+## 4. Configuration (`/etc/toganomon.toml`)
 
 This file is the only thing that differs between airports. An unknown
 section or key is an error, so a misspelling does not go unnoticed. Omitted
@@ -166,13 +166,13 @@ minute later.
 [paths]
 aircraft = "/run/readsb/aircraft.json"
 traces = "/run/readsb/traces"
-state = "/var/lib/goaround-watch/state.json"           # internal; if lost, the last 24 hours are rebuilt
-history = "/var/lib/goaround-watch/go_arounds.json"    # every go-around, kept forever; do not delete
-summary = "/var/www/html/goaround-watch/summary.json"
-go_arounds = "/var/www/html/goaround-watch/go-arounds.json"
+state = "/var/lib/toganomon/state.json"           # internal; if lost, the last 24 hours are rebuilt
+history = "/var/lib/toganomon/go_arounds.json"    # every go-around, kept forever; do not delete
+summary = "/var/www/html/toganomon/summary.json"
+go_arounds = "/var/www/html/toganomon/go-arounds.json"
 # metar = "/path/to/metar.txt"                          # section 5
-# log = "/var/log/goaround-watch/events.log"            # one line per go-around
-# movements_log = "/var/log/goaround-watch/movements.log" # one line per arrival / departure
+# log = "/var/log/toganomon/events.log"            # one line per go-around
+# movements_log = "/var/log/toganomon/movements.log" # one line per arrival / departure
 # aircraft_db = "/usr/local/share/tar1090/git-db/db"     # tar1090-db: registration and type
 ```
 
@@ -193,7 +193,7 @@ Keep `state` and `history` on persistent storage (not `/run` or a tmpfs).
 ### Checking the configuration
 
 ```sh
-sudo -u <user> /usr/local/bin/goaround_watch.py -c /etc/goaround-watch.toml; echo $?
+sudo -u <user> /usr/local/bin/toganomon.py -c /etc/toganomon.toml; echo $?
 ```
 
 | Exit code | Meaning |
@@ -227,8 +227,8 @@ temporary file, then rename it) so that a half-written file is never read.
 Run it once a minute. With cron and the dedicated user from section 3:
 
 ```
-# /etc/cron.d/goaround-watch
-* * * * * goaround /usr/local/bin/goaround_watch.py -c /etc/goaround-watch.toml >> /var/log/goaround-watch/goaround-watch.log 2>&1
+# /etc/cron.d/toganomon
+* * * * * toganomon /usr/local/bin/toganomon.py -c /etc/toganomon.toml >> /var/log/toganomon/toganomon.log 2>&1
 ```
 
 A systemd timer or anything else that runs it every minute works too.
@@ -243,7 +243,7 @@ own way.
 - After a few minutes look at the summary:
 
   ```sh
-  python3 -m json.tool /var/www/html/goaround-watch/summary.json
+  python3 -m json.tool /var/www/html/toganomon/summary.json
   ```
 
   If `arrivals` and `departures` grow and `runway` shows the runway in use,
@@ -263,25 +263,25 @@ must be served over HTTP. Any static file server will do:
 
 - With tar1090 installed, lighttpd is already running with
   `/var/www/html` as its document root; put the files below it.
-- Just to try it: `cd /var/www/html/goaround-watch && python3 -m http.server 8080`
+- Just to try it: `cd /var/www/html/toganomon && python3 -m http.server 8080`
 
 Put the three files of `web/` next to `go-arounds.json`:
 
 ```sh
-sudo install -m 0644 web/index.html web/goaround.js web/goaround.css /var/www/html/goaround-watch/
+sudo install -m 0644 web/index.html web/goaround.js web/goaround.css /var/www/html/toganomon/
 ```
 
-Open `http://<host>/goaround-watch/`. `?tz=Asia/Tokyo` sets the display time
+Open `http://<host>/toganomon/`. `?tz=Asia/Tokyo` sets the display time
 zone (default: the browser's), `?url=<json>` points to a JSON elsewhere.
 
 To embed the view in your own page, see "Web view" in the README.
 
 ## 9. Upgrading and removing
 
-- Upgrade: replace `goaround_watch.py`. The state and the history carry
+- Upgrade: replace `toganomon.py`. The state and the history carry
   over.
-- Remove: the cron line, `/usr/local/bin/goaround_watch.py`,
-  `/etc/goaround-watch.toml` and the files in `[paths]`.
+- Remove: the cron line, `/usr/local/bin/toganomon.py`,
+  `/etc/toganomon.toml` and the files in `[paths]`.
 
 ## 10. Known limitations
 

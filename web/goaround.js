@@ -1,5 +1,5 @@
-// goaround-watch web view: the go-around history (go-arounds.json written by
-// goaround_watch.py) as a list; each entry opens to a north-up track figure.
+// toganomon web view: the go-around history (go-arounds.json written by
+// toganomon.py) as a list; each entry opens to a north-up track figure.
 // Plain script, no build step: defines GoAroundView (window or module.exports).
 //
 //   const view = GoAroundView.mount(document.getElementById('list'), {
@@ -12,7 +12,7 @@
 //   flightLink(g) -> { href, label } | null   (default: FlightAware for a callsign)
 //   extraLinks(g, element)    add more links to an open entry (may be async)
 //   storage: { load() -> object | null, save(object) }   which entries are open
-//            (default: localStorage key 'goaround-watch')
+//            (default: localStorage key 'toganomon')
 // Returns { refresh(), stop(), fit() }; fit() re-lays out the open figures
 // after the container was resized.
 //
@@ -299,7 +299,7 @@
             url: 'go-arounds.json', pollMs: 60000, timeZone: 'UTC', flightLink: flightAware,
             extraLinks: null, storage: null,
         }, options || {});
-        const store = o.storage || localStore('goaround-watch');
+        const store = o.storage || localStore('toganomon');
         list.classList.add('ga-view');
         let items = [], airport = null, open = new Set(), timer = null;
 

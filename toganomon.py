@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""goaround-watch: airport arrivals, departures and probable go-arounds from
+"""toganomon: airport arrivals, departures and probable go-arounds from
 readsb traces.
 
 Run every minute (cron or a systemd timer):
 
-    goaround_watch.py [-c /etc/goaround-watch.toml]
+    toganomon.py [-c /etc/toganomon.toml]
 
 Each run reads readsb's aircraft.json, records the ICAO address (hex) of
 every aircraft heard in the last SEEN_S seconds, drops addresses not heard
@@ -63,7 +63,7 @@ again.
 
 Everything airport-specific comes from the TOML configuration (see
 examples/rjff.toml); the configuration path can also be given with
-GOAROUND_WATCH_CONFIG.
+TOGANOMON_CONFIG.
 """
 import argparse
 import glob
@@ -78,7 +78,7 @@ import tempfile
 import time
 import tomllib
 
-DEFAULT_CONFIG = os.environ.get("GOAROUND_WATCH_CONFIG", "/etc/goaround-watch.toml")
+DEFAULT_CONFIG = os.environ.get("TOGANOMON_CONFIG", "/etc/toganomon.toml")
 WINDOW_S = 24 * 3600
 SEEN_S = 60
 # Refuse to count from an aircraft.json that readsb stopped updating.
@@ -137,10 +137,10 @@ DEFAULTS = {
     "paths": {
         "aircraft": "/run/readsb/aircraft.json",
         "traces": "/run/readsb/traces",
-        "state": "/var/lib/goaround-watch/state.json",
-        "history": "/var/lib/goaround-watch/go_arounds.json",
-        "summary": "/var/www/html/goaround-watch/summary.json",
-        "go_arounds": "/var/www/html/goaround-watch/go-arounds.json",
+        "state": "/var/lib/toganomon/state.json",
+        "history": "/var/lib/toganomon/go_arounds.json",
+        "summary": "/var/www/html/toganomon/summary.json",
+        "go_arounds": "/var/www/html/toganomon/go-arounds.json",
         "metar": None,
         "log": None,
         "movements_log": None,
