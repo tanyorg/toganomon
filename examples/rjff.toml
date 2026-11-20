@@ -3,22 +3,28 @@
 
 [airport]
 icao = "RJFF"
-arp = [33.585, 130.451]          # airport reference point (lat, lon)
+# Everything else of the airport comes from airports.json (RJFF is in it):
+# the reference point, the elevation and the runway gates. To set them by
+# hand, or for an airport not in airports.json:
+# arp = [33.585899, 130.451004]  # airport reference point (lat, lon)
+# elevation_ft = 32              # the gate altitudes are heights above this
 
-# One [[runway]] per runway (or pair of close parallel runways sharing one
-# gate). ends = the two designators; true_track = true track flown on the
-# first end. The gate is a box around the extended centreline through
-# center (default: the ARP).
-[[runway]]
-ends = ["16", "34"]
-true_track = 157.0
-gate_along_km = 6.0              # each way from the centre along the centreline
-gate_cross_km = 1.0              # each side of the centreline
-length_m = 2800                  # only for drawing
+# One [[runway]] per runway (or group of close parallel runways sharing one
+# gate). ends = the two designators; true_track = TRUE track flown on the
+# first end (not the magnetic heading); the gate is a box around the
+# extended centreline through center (default: the ARP). Check the values
+# with: toganomon.py --check-runways
+# [[runway]]
+# ends = ["16", "34"]
+# true_track = 150.3
+# center = [33.586069, 130.4492]   # between 16L/34R and 16R/34L
+# gate_along_km = 6.0              # each way from the centre along the centreline
+# gate_cross_km = 1.1              # each side of the centreline
+# length_m = 2800                  # only for drawing
 
-# Checked on 2026-11-12..14 traces: points below 1000 ft near the airport
-# track 150-160 or 330-340 deg. Departures from 16 are first received
-# anywhere from the ground to ~1400 ft, hence the higher departure limit.
+# Heights above the airport elevation. Departures from 16 are first
+# received anywhere from the ground to ~1400 ft, hence the higher
+# departure limit.
 [gate]
 arr_alt_ft = 1000
 dep_alt_ft = 2000
@@ -31,7 +37,7 @@ min_gs_kt = 60                   # slower arrivals are never paired
 exclude_categories = ["A7"]      # rotorcraft
 
 # Aircraft whose traces are read: within radius_km of the ARP and below
-# max_alt_ft (pressure altitude), and for 5 minutes after that. Keep
+# max_alt_ft above the airport, and for 5 minutes after that. Keep
 # max_alt_ft well above dep_alt_ft: a departure first heard in the climb can
 # be some 3000 ft higher at the next run.
 [candidates]

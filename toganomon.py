@@ -54,7 +54,8 @@ rewrites it only every several minutes).
 Altitudes in ADS-B are pressure altitudes (1013.25 hPa datum). With a METAR
 file configured, the gates compare them after a QNH correction, so a deep low
 does not lift every approach above the gate. Without one (or with a stale
-METAR) the raw pressure altitude is used.
+METAR) the raw pressure altitude is used. The gate and candidate altitudes
+are heights above the airport elevation.
 
 If the history exists but cannot be read, it is left untouched and neither it
 nor the go-arounds JSON is written until someone fixes it; go-arounds of the
@@ -63,7 +64,9 @@ again.
 
 Everything airport-specific comes from the TOML configuration (see
 examples/rjff.toml); the configuration path can also be given with
-TOGANOMON_CONFIG.
+TOGANOMON_CONFIG. An airport listed in airports.json needs only its ICAO
+code: the reference point, elevation and runway gates come from there
+unless the configuration gives them.
 """
 import argparse
 import glob
@@ -128,7 +131,7 @@ KM_PER_DEG = 111.2
 
 # Defaults for every configuration key; [[runway]] has no default.
 DEFAULTS = {
-    "airport": {"icao": None, "arp": None},
+    "airport": {"icao": None, "arp": None, "elevation_ft": None},
     "gate": {"arr_alt_ft": 1000, "dep_alt_ft": 2000, "track_tol_deg": 20.0, "rate_fpm": 200},
     "go_around": {"window_s": 600, "min_gs_kt": 60, "exclude_categories": ["A7"]},
     # max_alt_ft well above the departure gate: a departure first heard in
@@ -145,13 +148,19 @@ DEFAULTS = {
         "log": None,
         "movements_log": None,
         "aircraft_db": None,
+        "airports": None,
     },
 }
 RUNWAY_DEFAULTS = {"gate_along_km": 6.0, "gate_cross_km": 1.0, "length_m": None}
+# Where airports.json (airport data by ICAO code) is looked for when
+# [paths] airports is not set: next to this script, then the shared copy.
+AIRPORTS_SEARCH = [os.path.join(os.path.dirname(os.path.realpath(__file__)), "airports.json"),
+                   "/usr/local/share/toganomon/airports.json"]
 
 # Set by configure(); module-level so the detection functions stay simple.
 ICAO = None
 ARP_LAT = ARP_LON = None
+ELEVATION_FT = 0.0
 RUNWAYS = []            # [{"ends": (a, b), "true_track", "lat", "lon", "gate_along_km", "gate_cross_km", "length_m"}]
 RUNWAY_HDG = {}         # designator -> true track
 GATE_ARR_ALT_FT = GATE_DEP_ALT_FT = TRACK_TOL_DEG = RATE_FPM = None
@@ -172,8 +181,52 @@ def _num(v, what):
     return float(v)
 
 
-def parse_config(doc):
-    """TOML document (dict) -> complete configuration; raises ConfigError."""
+def load_airports(path=None):
+    """airports.json -> {ICAO: entry}. path None: the first of AIRPORTS_SEARCH
+    that exists, or {} when there is none. Raises ConfigError on a file that
+    is there but unreadable, or on an explicit path that is missing."""
+    paths = [path] if path else [p for p in AIRPORTS_SEARCH if os.path.exists(p)][:1]
+    for p in paths:
+        try:
+            with open(p, encoding="utf-8") as f:
+                doc = json.load(f)
+            airports = doc["airports"]
+            if not isinstance(airports, dict):
+                raise ValueError("airports is not an object")
+            return airports
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise ConfigError(f"airports file {p}: {e}") from e
+    return {}
+
+
+def _runway(r, i, arp):
+    unknown = set(r) - {"ends", "true_track", "center"} - set(RUNWAY_DEFAULTS)
+    if unknown:
+        raise ConfigError(f"unknown key(s) in [[runway]] #{i + 1}: {', '.join(sorted(unknown))}")
+    ends = r.get("ends")
+    if not (isinstance(ends, list) and len(ends) == 2 and all(isinstance(e, str) and e for e in ends)):
+        raise ConfigError(f'[[runway]] #{i + 1}: ends = ["16", "34"] is required')
+    center = r.get("center", arp)
+    if not isinstance(center, list) or len(center) != 2:
+        raise ConfigError(f"[[runway]] #{i + 1}: center = [lat, lon]")
+    rw = dict(RUNWAY_DEFAULTS)
+    rw.update({k: v for k, v in r.items() if k in RUNWAY_DEFAULTS})
+    return {
+        "ends": tuple(ends), "true_track": _num(r.get("true_track"), "true_track") % 360.0,
+        "lat": _num(center[0], "center lat"), "lon": _num(center[1], "center lon"),
+        "gate_along_km": _num(rw["gate_along_km"], "gate_along_km"),
+        "gate_cross_km": _num(rw["gate_cross_km"], "gate_cross_km"),
+        "length_m": None if rw["length_m"] is None else _num(rw["length_m"], "length_m"),
+    }
+
+
+def parse_config(doc, airports=None):
+    """TOML document (dict) -> complete configuration; raises ConfigError.
+
+    What [airport] and [[runway]] leave out (arp, elevation_ft, the runways)
+    comes from the airport's entry in airports.json: a dict {ICAO: entry},
+    or None to load it from [paths] airports / AIRPORTS_SEARCH when needed.
+    """
     cfg = {k: dict(v) for k, v in DEFAULTS.items()}
     for section, values in doc.items():
         if section == "runway":
@@ -187,36 +240,47 @@ def parse_config(doc):
     a = cfg["airport"]
     if not isinstance(a["icao"], str) or not a["icao"]:
         raise ConfigError("[airport] icao is required")
+    runways = doc.get("runway")
+    if runways is not None and (not isinstance(runways, list) or not runways):
+        raise ConfigError("[[runway]]: give at least one, or none to use airports.json")
+    entry = None
+    if a["arp"] is None or runways is None or a["elevation_ft"] is None:
+        if airports is None:
+            try:
+                airports = load_airports(cfg["paths"]["airports"])
+            except ConfigError:
+                if a["arp"] is None or runways is None:
+                    raise
+                airports = {}        # only the elevation was wanted; 0 then
+        entry = airports.get(a["icao"])
+        if entry is not None and not isinstance(entry, dict):
+            raise ConfigError(f"airports.json: {a['icao']} is not an object")
+        if entry is None and (a["arp"] is None or runways is None):
+            raise ConfigError(f"{a['icao']} is not in airports.json: give [airport] arp and [[runway]]")
+    if a["arp"] is None:
+        a["arp"] = entry.get("arp")
     if not isinstance(a["arp"], list) or len(a["arp"]) != 2:
         raise ConfigError("[airport] arp = [lat, lon] is required")
     a["arp"] = [_num(a["arp"][0], "arp lat"), _num(a["arp"][1], "arp lon")]
-    runways = doc.get("runway")
-    if not isinstance(runways, list) or not runways:
-        raise ConfigError("at least one [[runway]] is required")
+    if a["elevation_ft"] is None:
+        a["elevation_ft"] = entry.get("elevation_ft", 0) if entry else 0
+    a["elevation_ft"] = _num(a["elevation_ft"], "elevation_ft")
+    if runways is None:
+        runways = entry.get("runways")
+        if not isinstance(runways, list) or not runways:
+            raise ConfigError(f"airports.json: {a['icao']} has no runways")
+        # "members" (the runways of a group) is only for people reading the file.
+        runways = [{k: v for k, v in r.items() if k != "members"} if isinstance(r, dict) else r for r in runways]
     cfg["runways"] = []
     seen = set()
     for i, r in enumerate(runways):
-        unknown = set(r) - {"ends", "true_track", "center"} - set(RUNWAY_DEFAULTS)
-        if unknown:
-            raise ConfigError(f"unknown key(s) in [[runway]] #{i + 1}: {', '.join(sorted(unknown))}")
-        ends = r.get("ends")
-        if not (isinstance(ends, list) and len(ends) == 2 and all(isinstance(e, str) and e for e in ends)):
-            raise ConfigError(f'[[runway]] #{i + 1}: ends = ["16", "34"] is required')
-        if seen & set(ends):
+        if not isinstance(r, dict):
+            raise ConfigError(f"[[runway]] #{i + 1} is not a table")
+        rw = _runway(r, i, a["arp"])
+        if seen & set(rw["ends"]):
             raise ConfigError(f"[[runway]] #{i + 1}: designator used twice")
-        seen |= set(ends)
-        center = r.get("center", a["arp"])
-        if not isinstance(center, list) or len(center) != 2:
-            raise ConfigError(f"[[runway]] #{i + 1}: center = [lat, lon]")
-        rw = dict(RUNWAY_DEFAULTS)
-        rw.update({k: v for k, v in r.items() if k in RUNWAY_DEFAULTS})
-        cfg["runways"].append({
-            "ends": tuple(ends), "true_track": _num(r.get("true_track"), "true_track") % 360.0,
-            "lat": _num(center[0], "center lat"), "lon": _num(center[1], "center lon"),
-            "gate_along_km": _num(rw["gate_along_km"], "gate_along_km"),
-            "gate_cross_km": _num(rw["gate_cross_km"], "gate_cross_km"),
-            "length_m": None if rw["length_m"] is None else _num(rw["length_m"], "length_m"),
-        })
+        seen |= set(rw["ends"])
+        cfg["runways"].append(rw)
     return cfg
 
 
@@ -230,12 +294,13 @@ def load_config(path):
 
 def configure(cfg):
     """Install a parsed configuration as the module settings."""
-    global ICAO, ARP_LAT, ARP_LON, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
+    global ICAO, ARP_LAT, ARP_LON, ELEVATION_FT, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
     global RATE_FPM, GA_WINDOW_S, GA_MIN_GS_KT, GA_EXCLUDE_CATEGORIES, CANDIDATE_KM, CANDIDATE_ALT_FT
     global AIRCRAFT_JSON, TRACES_DIR, STATE_PATH, GA_HISTORY, OUT_PATH, GA_OUT, METAR_PATH, GA_LOG
     global MOVES_LOG, AIRCRAFT_DB
     ICAO = cfg["airport"]["icao"]
     ARP_LAT, ARP_LON = cfg["airport"]["arp"]
+    ELEVATION_FT = cfg["airport"]["elevation_ft"]
     RUNWAYS = cfg["runways"]
     RUNWAY_HDG = {}
     for rw in RUNWAYS:
@@ -910,7 +975,8 @@ def main(argv=None):
     # A rebuilt state (first run, or the state was lost) logs the rebuilt
     # 24 hours again: a reader may see a movement twice after that.
     known = {movement_key(m) for m in state.get("movements", []) if isinstance(m, list) and len(m) >= 4}
-    update_movements(state, snapshot, qnh_offset_ft(qnh))
+    # The gates and the candidate altitude are heights above the airport.
+    update_movements(state, snapshot, qnh_offset_ft(qnh) - ELEVATION_FT)
     if MOVES_LOG:
         try:
             with open(MOVES_LOG, "a", encoding="utf-8") as log:
