@@ -45,10 +45,10 @@ See [`examples/rjff.toml`](examples/rjff.toml).
   `done` turns true once the entry is settled: its outcome no longer changes
   (an arrival that looked like a landing can still become another go-around)
   and the track is complete. `nth` is 2 (3, ...) when the same airframe
-  went around within the previous 2 hours. `reg` and `type` (ICAO type
-  designator) come from `aircraft_db`, a tar1090-db directory (files of
-  hex prefixes, as installed with tar1090 under `git-db/db`); without it, or
-  for an aircraft not in it, they are null.
+  with the same callsign went around within the previous 2 hours. `reg` and
+  `type` (ICAO type designator) come from `aircraft_db`, a tar1090-db
+  directory (files of hex prefixes, as installed with tar1090 under
+  `git-db/db`); without it, or for an aircraft not in it, they are null.
 - `log` (optional, text): one tab-separated line per go-around: UTC time,
   callsign, runway, hex.
 - `movements_log` (optional, text): one tab-separated line per arrival or
