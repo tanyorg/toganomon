@@ -43,6 +43,13 @@ See [`examples/rjff.toml`](examples/rjff.toml).
   `done` turns true once the entry is settled: its outcome no longer changes
   (an arrival that looked like a landing can still become another go-around)
   and the track is complete.
+- `log` (optional, text): one tab-separated line per go-around: UTC time,
+  callsign, runway, hex.
+- `movements_log` (optional, text): one tab-separated line per arrival or
+  departure: UTC time, `arr`/`dep`, runway, hex, callsign, ground speed (kt),
+  emitter category (`-` when unknown). The long-term record of traffic, e.g.
+  for go-arounds per 100 arrivals. It is never rewritten; after the state is
+  lost the rebuilt 24 hours are appended again, so dedupe by time, kind and hex.
 - `history` / `state`: internal, keep them on persistent storage.
 
 ## Web view

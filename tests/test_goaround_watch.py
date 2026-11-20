@@ -303,6 +303,20 @@ class GoAround(unittest.TestCase):
         self.assertEqual([(g["hex"], g["flight"], g["rwy"], g["t"]) for g in got],
                          [("aaaaaa", "HGB308", "34", T0 + 65), ("eeeeee", None, "16", T0 + 200)])
 
+    def test_movement_lines(self):
+        t = 1794556800.0                                  # 2026-11-13T08:00:00Z
+        moves = [[t + 60, "dep", "16", "86d200", "ANA256", 150.4, "A3"],
+                 [t, "arr", "16", "86d200", "ANA256", 140, "A3"],
+                 [t + 30, "arr", "34", "abcdef", None, None, None],
+                 [t + 90, "arr", "34", "123456"]]        # an older state: five or four fields
+        known = {cs.movement_key(moves[1])}
+        self.assertEqual(cs.movement_lines(moves, known), [
+            "2026-11-13T08:00:30Z\tarr\t34\tabcdef\t-\t-\t-\n",
+            "2026-11-13T08:01:00Z\tdep\t16\t86d200\tANA256\t150\tA3\n",
+            "2026-11-13T08:01:30Z\tarr\t34\t123456\t-\t-\t-\n",
+        ])
+        self.assertEqual(cs.movement_lines(moves, {cs.movement_key(m) for m in moves}), [])
+
     def test_log_line(self):
         t = calendar.timegm((2026, 11, 14, 2, 25, 0))
         self.assertEqual(cs.log_line({"t": t, "hex": "86d200", "flight": "ANA256", "rwy": "16"}),
@@ -588,6 +602,7 @@ class HistoryFile(unittest.TestCase):
             "OUT_PATH": os.path.join(d, "summary.json"),
             "TRACES_DIR": os.path.join(d, "traces"),
             "GA_LOG": os.path.join(d, "ga.log"),
+            "MOVES_LOG": os.path.join(d, "movements.log"),
             "GA_HISTORY": os.path.join(d, "go_arounds.json"),
             "GA_OUT": os.path.join(d, "go-arounds.json"),
             "METAR_PATH": os.path.join(d, "metar.txt"),
@@ -598,7 +613,7 @@ class HistoryFile(unittest.TestCase):
         with open(paths["GA_HISTORY"], "w") as f:
             f.write(history_text)
         keys = {"AIRCRAFT_JSON": "aircraft", "STATE_PATH": "state", "OUT_PATH": "summary", "TRACES_DIR": "traces",
-                "GA_LOG": "log", "GA_HISTORY": "history", "GA_OUT": "go_arounds", "METAR_PATH": "metar"}
+                "GA_LOG": "log", "MOVES_LOG": "movements_log", "GA_HISTORY": "history", "GA_OUT": "go_arounds", "METAR_PATH": "metar"}
         with open(RJFF_TOML) as f:
             text = f.read().split("[paths]")[0]
         cfg = os.path.join(d, "test.toml")
@@ -628,6 +643,7 @@ class HistoryFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             rc, paths = self.run_main(d, "[]")
             self.assertEqual(rc, 0)
+            self.assertTrue(os.path.exists(paths["MOVES_LOG"]))   # opened, nothing moved
             with open(paths["GA_OUT"]) as f:
                 self.assertEqual(json.load(f)["go_arounds"], [])
 
