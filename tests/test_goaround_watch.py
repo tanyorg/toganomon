@@ -547,12 +547,63 @@ class History(unittest.TestCase):
         self.assertEqual([g["id"] for g in out["go_arounds"]], ["b", "a"])
         self.assertNotIn("track_full", out["go_arounds"][1])   # internal
 
+    def test_second_go_around_of_the_same_airframe(self):
+        hist = [{"id": "a", "hex": "aaaaaa", "t": T0}, {"id": "b", "hex": "bbbbbb", "t": T0 + 60},
+                {"id": "c", "hex": "aaaaaa", "t": T0 + 1200}, {"id": "d", "hex": "aaaaaa", "t": T0 + 3000},
+                {"id": "e", "hex": "aaaaaa", "t": T0 + 3000 + cs.SAME_AIRFRAME_S + 1}]
+        self.assertEqual(cs.airframe_nth(hist), {"a": 1, "b": 1, "c": 2, "d": 3, "e": 1})
+        out = cs.public_history(hist, T0)["go_arounds"]
+        self.assertEqual([(g["id"], g["nth"]) for g in out], [("e", 1), ("d", 3), ("c", 2), ("b", 1), ("a", 1)])
+
     def test_extract_track_ground_and_bounds(self):
         doc = {"timestamp": T0, "trace": [
             [0, cs.ARP_LAT, cs.ARP_LON, "ground"], [3, cs.ARP_LAT, cs.ARP_LON, 100],
             [20, cs.ARP_LAT, cs.ARP_LON, 200], [40, None, None, 300], [500, cs.ARP_LAT, cs.ARP_LON, 400]]}
         self.assertEqual(cs.extract_track(doc, T0, T0 + 100), [[0, 0.0, 0.0, 0], [20, 0.0, 0.0, 200]])
         self.assertEqual(cs.extract_track(None, T0, T0 + 1), [])
+
+
+def write_db(d, name, doc, gz=True):
+    raw = json.dumps(doc).encode()
+    with open(os.path.join(d, name + ".js"), "wb") as f:
+        f.write(gzip.compress(raw) if gz else raw)
+
+
+class AircraftDb(unittest.TestCase):
+    def db(self, d):
+        # tar1090-db layout: "8" splits "87" off into a file of its own
+        write_db(d, "8", {"children": ["87"], "681B7": ["JA73NR", "B738", "00", "BOEING 737-800"]})
+        write_db(d, "87", {"CDE5": ["58-1219", "KC2", "10", "KAWASAKI C-2"], "0001": ["", None]}, gz=False)
+        return d
+
+    def test_lookup(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.db(d)
+            self.assertEqual(cs.aircraft_info("8681b7", d), {"reg": "JA73NR", "type": "B738"})
+            self.assertEqual(cs.aircraft_info("87cde5", d), {"reg": "58-1219", "type": "KC2"})
+            self.assertEqual(cs.aircraft_info("870001", d), {"reg": None, "type": None})
+            self.assertEqual(cs.aircraft_info("8affff", d), {"reg": None, "type": None})
+            self.assertIsNone(cs.aircraft_info("abcdef", d))   # no "A" file
+
+    def test_added_once_and_kept_public(self):
+        with tempfile.TemporaryDirectory() as d:
+            hist = [{"id": "x", "hex": "8681b7", "t": T0}, {"id": "y", "hex": "abcdef", "t": T0 + 1}]
+            cs.add_aircraft(hist, d)                      # empty directory: retried later
+            self.assertNotIn("reg", hist[0])
+            self.db(d)
+            cs.add_aircraft(hist, d)
+            self.assertEqual((hist[0]["reg"], hist[0]["type"]), ("JA73NR", "B738"))
+            self.assertNotIn("reg", hist[1])
+            hist[0]["reg"] = "kept"
+            cs.add_aircraft(hist, d)                      # looked up once
+            self.assertEqual(hist[0]["reg"], "kept")
+            out = cs.public_history(hist, T0)["go_arounds"]
+            self.assertEqual([(g["reg"], g["type"]) for g in out], [(None, None), ("kept", "B738")])
+
+    def test_config_key(self):
+        doc = tomllib.load(open(RJFF_TOML, "rb"))
+        doc.setdefault("paths", {})["aircraft_db"] = "/usr/local/share/tar1090/git-db/db"
+        self.assertEqual(cs.parse_config(doc)["paths"]["aircraft_db"], "/usr/local/share/tar1090/git-db/db")
 
 
 def metar_at(t, rest):

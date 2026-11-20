@@ -48,3 +48,4 @@ go_arounds = "/var/www/html/goaround-watch/go-arounds.json"
 # metar = "/var/www/html/metar.txt"   # raw METAR text for the QNH correction and wind
 # log = "/var/log/goaround-watch.log" # one line per go-around
 # movements_log = "/var/log/goaround-watch-movements.log" # one line per arrival/departure
+# aircraft_db = "/usr/local/share/tar1090/git-db/db" # tar1090-db: registration and type

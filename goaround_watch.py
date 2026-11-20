@@ -38,7 +38,9 @@ categories (rotorcraft, A7) are not paired. Each new go-around is appended
 to the optional log as one tab-separated line (UTC time, callsign, runway,
 hex). Each new movement (arrival or departure) can likewise be appended to
 the optional movements log, the long-term record of how many aircraft used
-which runway (the state keeps only the last 24 hours).
+which runway (the state keeps only the last 24 hours). With aircraft_db (a
+tar1090-db directory) each go-around also gets the registration and type,
+looked up once.
 
 Every go-around is also kept forever in the history file and published as
 the go-arounds JSON for the web view, with the METAR wind at detection time
@@ -82,6 +84,9 @@ SEEN_S = 60
 # Refuse to count from an aircraft.json that readsb stopped updating.
 STALE_S = 120
 DEDUP_S = 20 * 60
+# A go-around within this long after the same airframe's previous one is
+# its 2nd (3rd, ...) in the public history.
+SAME_AIRFRAME_S = 2 * 3600
 # A departure point counts only when the altitude really rises by
 # DEP_CONFIRM_FT within DEP_CONFIRM_S after it: in gusts the baro rate of an
 # aircraft on final flips above +rate_fpm for single points (JFS91
@@ -139,6 +144,7 @@ DEFAULTS = {
         "metar": None,
         "log": None,
         "movements_log": None,
+        "aircraft_db": None,
     },
 }
 RUNWAY_DEFAULTS = {"gate_along_km": 6.0, "gate_cross_km": 1.0, "length_m": None}
@@ -153,6 +159,7 @@ GA_WINDOW_S = GA_MIN_GS_KT = None
 GA_EXCLUDE_CATEGORIES = set()
 CANDIDATE_KM = CANDIDATE_ALT_FT = None
 AIRCRAFT_JSON = TRACES_DIR = STATE_PATH = GA_HISTORY = OUT_PATH = GA_OUT = METAR_PATH = GA_LOG = None
+MOVES_LOG = AIRCRAFT_DB = None
 
 
 class ConfigError(ValueError):
@@ -226,7 +233,7 @@ def configure(cfg):
     global ICAO, ARP_LAT, ARP_LON, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
     global RATE_FPM, GA_WINDOW_S, GA_MIN_GS_KT, GA_EXCLUDE_CATEGORIES, CANDIDATE_KM, CANDIDATE_ALT_FT
     global AIRCRAFT_JSON, TRACES_DIR, STATE_PATH, GA_HISTORY, OUT_PATH, GA_OUT, METAR_PATH, GA_LOG
-    global MOVES_LOG
+    global MOVES_LOG, AIRCRAFT_DB
     ICAO = cfg["airport"]["icao"]
     ARP_LAT, ARP_LON = cfg["airport"]["arp"]
     RUNWAYS = cfg["runways"]
@@ -243,6 +250,7 @@ def configure(cfg):
     AIRCRAFT_JSON, TRACES_DIR, STATE_PATH = p["aircraft"], p["traces"], p["state"]
     GA_HISTORY, OUT_PATH, GA_OUT = p["history"], p["summary"], p["go_arounds"]
     METAR_PATH, GA_LOG, MOVES_LOG = p["metar"], p["log"], p["movements_log"]
+    AIRCRAFT_DB = p["aircraft_db"]
 
 
 def write_atomic(path, text, mode=0o644):
@@ -778,6 +786,65 @@ def update_history(history, state, now, metar_text=None, trace_loader=None, qnh=
     return history
 
 
+def _db_file(db_dir, name, cache):
+    if name not in cache:
+        try:
+            with open(os.path.join(db_dir, name + ".js"), "rb") as f:
+                raw = f.read()
+            if raw[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(raw)
+            doc = json.loads(raw)
+            cache[name] = doc if isinstance(doc, dict) else None
+        except (OSError, ValueError, EOFError):
+            cache[name] = None
+    return cache[name]
+
+
+def aircraft_info(hx, db_dir, cache=None):
+    """hex -> {"reg", "type"} from a tar1090-db directory (files named by a hex
+    prefix, gzipped JSON {rest of hex: [reg, type, flags, ...]}, a file's
+    "children" naming the longer prefixes split off into files of their own);
+    None when the directory cannot be read, {"reg": None, "type": None} when
+    the aircraft is not in it."""
+    cache = {} if cache is None else cache
+    hx = hx.upper()
+    level = 1
+    doc = _db_file(db_dir, hx[:1], cache)
+    while doc is not None and hx[:level + 1] in (doc.get("children") or []) and level < len(hx):
+        level += 1
+        doc = _db_file(db_dir, hx[:level], cache)
+    if doc is None:
+        return None
+    e = doc.get(hx[level:])
+    str_or_none = lambda v: v if isinstance(v, str) and v else None
+    if not isinstance(e, list):
+        return {"reg": None, "type": None}
+    return {"reg": str_or_none(e[0] if e else None), "type": str_or_none(e[1] if len(e) > 1 else None)}
+
+
+def add_aircraft(history, db_dir):
+    """Registration and type for entries that have none yet (looked up once;
+    an entry stays without them while the database cannot be read)."""
+    cache = {}
+    for h in history:
+        if "reg" not in h:
+            info = aircraft_info(h["hex"], db_dir, cache)
+            if info is not None:
+                h.update(info)
+
+
+def airframe_nth(history):
+    """id -> 1 for an airframe's first go-around, 2 for one within
+    SAME_AIRFRAME_S after its previous go-around, and so on."""
+    out, last = {}, {}
+    for h in sorted(history, key=lambda h: h["t"]):
+        prev = last.get(h.get("hex")) if h.get("hex") else None
+        n = prev[1] + 1 if prev and h["t"] - prev[0] <= SAME_AIRFRAME_S else 1
+        last[h.get("hex")] = (h["t"], n)
+        out[h.get("id")] = n
+    return out
+
+
 def airport_info():
     """The airport and runways, for drawing tracks (runway frame) in the web view."""
     return {"icao": ICAO, "arp": [ARP_LAT, ARP_LON], "runways": [
@@ -787,10 +854,11 @@ def airport_info():
 
 def public_history(history, now):
     """GA_OUT payload: newest first, without internal fields."""
-    keep = ("id", "t", "arr_t", "hex", "flight", "rwy", "climb_after_s", "wind",
+    keep = ("id", "t", "arr_t", "hex", "flight", "reg", "type", "rwy", "climb_after_s", "wind",
             "wind_rwy", "qnh", "gs", "category", "outcome", "track", "track_from", "done")
+    nth = airframe_nth(history)
     return {"now": now, "airport": airport_info(),
-            "go_arounds": [{k: h.get(k) for k in keep} for h in reversed(history)]}
+            "go_arounds": [dict({k: h.get(k) for k in keep}, nth=nth[h.get("id")]) for h in reversed(history)]}
 
 
 def summary(state, now):
@@ -864,6 +932,8 @@ def main(argv=None):
         rc = 1
     else:
         history = update_history(history, state, now, metar, qnh=qnh)
+        if AIRCRAFT_DB:
+            add_aircraft(history, AIRCRAFT_DB)
     write_atomic(STATE_PATH, json.dumps(state, separators=(",", ":")), 0o600)
     if history is not None:
         write_atomic(GA_HISTORY, json.dumps(history, separators=(",", ":"), ensure_ascii=False), 0o600)
