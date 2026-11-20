@@ -45,8 +45,22 @@
         return `${mm}/${dd} ${hm}`;
     }
 
+    // 2 -> '2ND': the same airframe's 2nd (3rd, ...) go-around within 2 hours.
+    function ordinal(n) {
+        const s = (n % 100 >= 11 && n % 100 <= 13) ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' }[n % 10] || 'TH');
+        return n + s;
+    }
+
     function title(g, timeZone) {
-        return `${clock(g.t, timeZone, true)}  ${g.flight || '???'}  RWY${g.rwy}`;
+        const parts = [clock(g.t, timeZone, true), g.flight || '???'];
+        if (g.reg) parts.push(g.reg);
+        parts.push(`RWY${g.rwy}`);
+        if (typeof g.nth === 'number' && g.nth > 1) parts.push(ordinal(g.nth));
+        return parts.join('  ');
+    }
+
+    function typeText(g) {
+        return g.type ? `TYPE ${g.type}` : '';
     }
 
     function climbText(g) {
@@ -79,7 +93,7 @@
     }
 
     function infoLines(g, timeZone) {
-        return [title(g, timeZone), climbText(g), outcomeText(g, timeZone), windText(g)].filter(Boolean);
+        return [title(g, timeZone), typeText(g), climbText(g), outcomeText(g, timeZone), windText(g)].filter(Boolean);
     }
 
     function legend() {
@@ -355,7 +369,7 @@
     }
 
     const api = {
-        mount, clock, title, climbText, outcomeText, windText, infoLines, legend,
+        mount, clock, ordinal, title, typeText, climbText, outcomeText, windText, infoLines, legend,
         runwayOf, trackGeometry, openIds, plotInset, flightAware,
     };
     if (typeof module === 'object' && module.exports) module.exports = api;

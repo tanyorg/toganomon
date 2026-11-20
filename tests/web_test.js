@@ -33,6 +33,14 @@ t('title: date, time, callsign, runway in the given zone', () => {
     assert.strictEqual(v.title({ ...base, flight: null }, JST), '11/13 13:02  ???  RWY34');
 });
 
+t('title: registration and the same airframe\'s 2nd go-around', () => {
+    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 1 }, JST), '11/13 13:02  HGB308  JA136A  RWY34');
+    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 2 }, JST), '11/13 13:02  HGB308  JA136A  RWY34  2ND');
+    assert.strictEqual(v.title({ ...base, reg: null, nth: 3 }, JST), '11/13 13:02  HGB308  RWY34  3RD');
+    assert.deepStrictEqual([1, 2, 3, 4, 11, 12, 13, 21, 22].map(v.ordinal),
+        ['1ST', '2ND', '3RD', '4TH', '11TH', '12TH', '13TH', '21ST', '22ND']);
+});
+
 t('climbText', () => {
     assert.strictEqual(v.climbText(base), 'CLIMB AFTER 65 s');
     assert.strictEqual(v.climbText({ ...base, climb_after_s: null }), '');
@@ -62,6 +70,7 @@ t('windText: gusts, head/tail and cross components', () => {
 t('infoLines: title first, empty parts dropped', () => {
     assert.deepStrictEqual(v.infoLines(base, JST), ['11/13 13:02  HGB308  RWY34', 'CLIMB AFTER 65 s', 'PENDING', 'WIND ---']);
     assert.deepStrictEqual(v.infoLines({ ...base, climb_after_s: null }, JST), ['11/13 13:02  HGB308  RWY34', 'PENDING', 'WIND ---']);
+    assert.deepStrictEqual(v.infoLines({ ...base, type: 'A21N' }, JST).slice(0, 2), ['11/13 13:02  HGB308  RWY34', 'TYPE A21N']);
 });
 
 t('runwayOf: from the airport block, with fallbacks', () => {
