@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Unit tests for goaround_watch.py (stdlib only, synthetic traces).
+"""Unit tests for toganomon.py (stdlib only, synthetic traces).
 
-Run: python3 -m unittest discover -s tests   (or python3 tests/test_goaround_watch.py)
+Run: python3 -m unittest discover -s tests   (or python3 tests/test_toganomon.py)
 The RJFF example configuration is the fixture, so it is checked too.
 """
 import calendar
@@ -19,7 +19,7 @@ import unittest
 sys.dont_write_bytecode = True
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("goaround_watch", os.path.join(HERE, "..", "goaround_watch.py"))
+spec = importlib.util.spec_from_file_location("toganomon", os.path.join(HERE, "..", "toganomon.py"))
 cs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cs)
 RJFF_TOML = os.path.join(HERE, "..", "examples", "rjff.toml")

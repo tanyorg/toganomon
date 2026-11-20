@@ -1,4 +1,4 @@
-/* goaround-watch web view (goaround.js). Dark theme; override the colours
+/* toganomon web view (goaround.js). Dark theme; override the colours
    as needed. The container passed to GoAroundView.mount() gets .ga-view. */
 .ga-view { font-size: 0.72rem; color: #c9d1d9; }
 .ga-empty { color: #8b949e; text-align: center; padding: 16px 0; }
