@@ -22,7 +22,10 @@ button.st-tile:disabled { cursor: default; }
 .st-hot .st-val { color: #d29922; }
 .st-flash { animation: st-flash 0.6s ease-in-out 6; }
 @keyframes st-flash { 50% { background: #d29922; } }
+.st-lastga { margin-top: 6px; font-size: 0.65rem; color: #d29922; text-align: center; }
+.st-lastga + .st-aircraft { margin-top: 2px; }
 .st-aircraft { margin-top: 6px; font-size: 0.65rem; color: #8b949e; text-align: center; }
 .st-time, .st-since { margin-top: 2px; font-size: 0.62rem; color: #8b949e; text-align: right; }
 .st-time.stale { color: #f85149; }
 .st-since { color: #d29922; }
+.st-panel [hidden] { display: none; }
