@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// Tests for the DOM-free parts of console/wind.js, console/float.js and
-// console/console.js. Run: node tests/console_test.js
+// Tests for the DOM-free parts of console/wind.js, console/stats.js,
+// console/float.js and console/console.js. Run: node tests/console_test.js
 'use strict';
 const assert = require('assert');
 const path = require('path');
 const W = require(path.join(__dirname, '..', 'console', 'wind.js'));
 const F = require(path.join(__dirname, '..', 'console', 'float.js'));
 const C = require(path.join(__dirname, '..', 'console', 'console.js'));
+const S = require(path.join(__dirname, '..', 'console', 'stats.js'));
 
 let failed = 0;
 function t(label, fn) {
@@ -81,14 +82,56 @@ t('mapUrl: tar1090 centred on the ARP', () => {
     assert.strictEqual(C.mapUrl(null, 9), '/tar1090/?zoom=9');
 });
 
-t('summaryView: tiles and a stale mark after 3 minutes', () => {
-    const now = Date.UTC(2026, 10, 22, 0, 0, 0) / 1000;
-    const s = { now, arrivals: 5, departures: 3, runway: '34', go_arounds: 1 };
-    assert.deepStrictEqual(C.summaryView(s, now + 60, 'Asia/Tokyo'),
-        { arrivals: '5', departures: '3', runway: '34', goArounds: '1', hot: true, updated: 'UPDATED 09:00', stale: false });
-    const v = C.summaryView({ ...s, go_arounds: 0, runway: null }, now + 400, 'UTC');
-    assert.deepStrictEqual([v.runway, v.hot, v.updated, v.stale], ['--', false, 'UPDATED 00:00 (7 MIN AGO)', true]);
-    assert.strictEqual(C.summaryView({}, now, 'UTC'), null);
+// 2026-11-13 07:42:00Z = 16:42 JST
+const NOW = Date.UTC(2026, 10, 13, 7, 42, 0) / 1000;
+const SUM = { now: NOW, window_s: 86400, total: 187, with_pos: 162, started: NOW - 2 * 86400,
+    arrivals: 212, departures: 193, runway: '16', runway_t: NOW - 120, go_arounds: 3 };
+
+t('Stats.view: tiles, aircraft line, update time in the given zone', () => {
+    const v = S.view(SUM, NOW + 30, 'Asia/Tokyo');
+    assert.deepStrictEqual(v, {
+        arrivals: '212', departures: '193', runway: '16', goArounds: '3', count: 3, hot: true, gaLast: null,
+        aircraft: '187 AIRCRAFT · POS 162', time: '16:42', stale: false, since: null });
+    assert.strictEqual(S.view(SUM, NOW, 'UTC').time, '07:42');
+});
+
+t('Stats.view: stale after 3 minutes', () => {
+    assert.strictEqual(S.view(SUM, NOW + 180, 'UTC').stale, false);
+    assert.strictEqual(S.view(SUM, NOW + 181, 'UTC').stale, true);
+});
+
+t('Stats.view: no runway in use after an hour without movements', () => {
+    assert.strictEqual(S.view({ ...SUM, runway_t: NOW - 3600 }, NOW, 'UTC').runway, '16');
+    assert.strictEqual(S.view({ ...SUM, runway_t: NOW - 3601 }, NOW, 'UTC').runway, null);
+    assert.strictEqual(S.view({ ...SUM, runway: null, runway_t: null }, NOW, 'UTC').runway, null);
+});
+
+t('Stats.view: last go-around date only when 24 h has none', () => {
+    const hist = [{ t: NOW - 3 * 86400 }, { t: NOW - 5 * 86400 }];   // 11/10 16:42 JST
+    const v = S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', hist);
+    assert.deepStrictEqual([v.goArounds, v.hot, v.gaLast], ['0', false, 'LAST 11/10']);
+    assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', [...hist].reverse()).gaLast, 'LAST 11/10');
+    assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', []).gaLast, null);
+    assert.strictEqual(S.view(SUM, NOW, 'Asia/Tokyo', hist).gaLast, null);
+});
+
+t('Stats.view: since when, during the first window', () => {
+    assert.strictEqual(S.view({ ...SUM, started: NOW - 3600 }, NOW, 'Asia/Tokyo').since, '11/13 15:42');
+});
+
+t('Stats.view: older or partial summaries', () => {
+    const v = S.view({ now: NOW, total: 5 }, NOW, 'UTC');
+    assert.deepStrictEqual([v.arrivals, v.runway, v.goArounds, v.count, v.aircraft], ['--', null, '--', null, '5 AIRCRAFT']);
+    assert.strictEqual(S.view(null, NOW, 'UTC'), null);
+    assert.strictEqual(S.view({ total: 1 }, NOW, 'UTC'), null);
+});
+
+t('Stats.increased: only a rise after the first poll', () => {
+    assert.strictEqual(S.increased(null, 3), false);
+    assert.strictEqual(S.increased(2, 3), true);
+    assert.strictEqual(S.increased(3, 3), false);
+    assert.strictEqual(S.increased(3, 2), false);     // one left the 24 h window
+    assert.strictEqual(S.increased(2, undefined), false);
 });
 
 t('zoneLabel: abbreviation where one exists, else an offset', () => {
