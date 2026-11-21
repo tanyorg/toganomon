@@ -63,12 +63,16 @@ t('windLines: the runway in use, else the ends with a headwind', () => {
     assert.deepStrictEqual(W.windLines(null, AP, '34'), []);
 });
 
-t('dirText / speedText', () => {
+t('dirText / speedText / gustText / varText', () => {
     assert.strictEqual(W.dirText(W.parseWind('Z 1Z 05010KT')), '050°');
     assert.strictEqual(W.dirText(W.parseWind('Z 1Z VRB03KT')), 'VRB');
     assert.strictEqual(W.dirText(W.parseWind('Z 1Z 00000KT')), 'CALM');
     assert.strictEqual(W.dirText(null), '---°');
-    assert.strictEqual(W.speedText(W.parseWind('Z 1Z 29015G25KT')), '15G25 kt');
+    assert.strictEqual(W.speedText(W.parseWind('Z 1Z 29015G25KT')), '15 kt');
+    assert.strictEqual(W.gustText(W.parseWind('Z 1Z 29015G25KT')), 'GUST 25kt');
+    assert.strictEqual(W.gustText(W.parseWind('Z 1Z 29015KT')), null);
+    assert.strictEqual(W.varText(W.parseWind('Z 1Z 29008KT 260V330')), '260V330');
+    assert.strictEqual(W.varText(W.parseWind('Z 1Z 29008KT')), null);
     assert.strictEqual(W.speedText(null), '-- kt');
 });
 
