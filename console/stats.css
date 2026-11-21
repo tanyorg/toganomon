@@ -23,8 +23,15 @@ button.st-tile:disabled { cursor: default; }
 .st-flash { animation: st-flash 0.6s ease-in-out 6; }
 @keyframes st-flash { 50% { background: #d29922; } }
 
+/* captions: the airport's counts, then the receiver's */
+.st-cap { margin: 8px 0 3px; font-size: 0.6rem; font-weight: bold; color: #8b949e; letter-spacing: 0.1em; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
+.st-cap:first-child { margin-top: 0; }
+.st-panel [hidden] { display: none; }
+
 /* label (left, dim) / value (right) rows; colour only for warn / alert */
-.st-rows { margin: 6px 0 0; font-size: 0.65rem; }
+.st-rows { margin: 4px 0 0; font-size: 0.65rem; }
+.st-status { margin-top: 8px; }
+.st-sub dt { padding-left: 1.2em; }
 .st-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 2px; }
 .st-row dt { color: #8b949e; letter-spacing: 0.04em; white-space: nowrap; }
 .st-row dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
