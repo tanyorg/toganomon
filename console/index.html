@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>toganomon console</title>
+    <link rel="stylesheet" href="/web/goaround.css">
+    <link rel="stylesheet" href="console.css">
+</head>
+<body>
+    <header>
+        <div class="airport">
+            <span class="icao" id="icao">----</span>
+            <span class="brand">toganomon</span>
+        </div>
+        <div class="wx">
+            <div class="wx-line"><span class="wx-label">METAR</span><span id="metar" class="wx-text">--</span></div>
+            <div class="wx-line"><span class="wx-label">TAF</span><span id="taf" class="wx-text">--</span></div>
+        </div>
+        <div class="clocks">
+            <div class="clock"><span class="clock-label">UTC</span><span id="clockUtc" class="clock-val">--:--:--</span></div>
+            <div class="clock"><span class="clock-label" id="clockLocalLabel">LOCAL</span><span id="clockLocal" class="clock-val">--:--:--</span></div>
+        </div>
+        <nav class="buttons" aria-label="windows">
+            <button class="win-btn" id="windBtn" title="WIND" aria-label="WIND">🧭</button>
+            <button class="win-btn" id="statsBtn" title="LAST 24H" aria-label="LAST 24H">📊</button>
+            <button class="win-btn" id="gaBtn" title="GO-AROUNDS" aria-label="GO-AROUNDS">🛫</button>
+        </nav>
+    </header>
+    <main>
+        <iframe id="map" title="tar1090" src="about:blank"></iframe>
+    </main>
+
+    <section class="float wind-float" id="windFloat" aria-label="WIND" hidden>
+        <div class="float-bar"><span>WIND</span><button class="float-close" aria-label="close">×</button></div>
+        <div class="float-body wind-body">
+            <svg id="windDial" class="wind-svg" viewBox="-70 -70 140 140" role="img" aria-label="wind and runways"></svg>
+            <div class="wind-dir" id="windDir">---°</div>
+            <div class="wind-spd" id="windSpd">-- kt</div>
+            <div class="wind-var-text" id="windVar"></div>
+            <div class="wind-comp" id="windComp"></div>
+        </div>
+    </section>
+
+    <section class="float stats-float" id="statsFloat" aria-label="LAST 24H" hidden>
+        <div class="float-bar"><span>LAST 24H</span><button class="float-close" aria-label="close">×</button></div>
+        <div class="float-body">
+            <div class="stats">
+                <div class="stat"><span class="stat-val" id="arrivals">--</span><span class="stat-label">ARR</span></div>
+                <div class="stat"><span class="stat-val" id="departures">--</span><span class="stat-label">DEP</span></div>
+                <div class="stat"><span class="stat-val" id="runway">--</span><span class="stat-label">RWY</span></div>
+                <button class="stat stat-ga" id="gaTile" title="open GO-AROUNDS"><span class="stat-val" id="goArounds">--</span><span class="stat-label">G/A</span></button>
+            </div>
+            <div class="updated" id="updated">UPDATED --</div>
+        </div>
+    </section>
+
+    <section class="float ga-float" id="gaFloat" aria-label="GO-AROUNDS" hidden>
+        <div class="float-bar"><span>GO-AROUNDS</span><button class="float-close" aria-label="close">×</button></div>
+        <div class="float-body" id="gaList"></div>
+    </section>
+
+    <script src="/web/goaround.js"></script>
+    <script src="float.js"></script>
+    <script src="wind.js"></script>
+    <script src="console.js"></script>
+</body>
+</html>
