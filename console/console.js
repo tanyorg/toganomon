@@ -76,27 +76,15 @@
         $('clockLocal').textContent = clockText(now, timeZone);
     }
 
-    // what the WIND window draws from
-    const wx = { airport: null, runway: null, metar: null };
-    function drawWind() {
-        const w = Wind.parseWind(wx.metar);
-        Wind.draw($('windDial'), w, wx.airport, wx.runway);
-        $('windDir').textContent = Wind.dirText(w);
-        $('windSpd').textContent = Wind.speedText(w);
-        $('windVar').textContent = w && w.varFrom !== null
-            ? `${String(w.varFrom).padStart(3, '0')}V${String(w.varTo).padStart(3, '0')}` : '';
-        $('windComp').textContent = Wind.windLines(w, wx.airport, wx.runway).join('\n');
-    }
+    // WIND panel (wind.js); fed by loadAirport, loadWx and Stats' runway
+    const wind = Wind.mount($('windBody'));
 
     let mapSet = false;
     async function loadAirport() {
         try {
             const d = await getJson(DATA + 'go-arounds.json');
             const a = d && d.airport;
-            if (a) {
-                wx.airport = a;
-                drawWind();
-            }
+            if (a) wind.update({ airport: a });
             if (a && a.icao) {
                 $('icao').textContent = a.icao;
                 document.title = `${a.icao} · toganomon console`;
@@ -106,7 +94,7 @@
                 mapSet = true;
             }
         } catch (e) { /* not written yet */ }
-        if (!mapSet || !wx.airport) setTimeout(loadAirport, 15000);
+        if (!mapSet) setTimeout(loadAirport, 15000);
     }
 
     async function loadWx() {
@@ -115,10 +103,7 @@
                 const t = await getText(DATA + kind + '.txt');
                 $(kind).textContent = t || '--';
                 $(kind).title = t;
-                if (kind === 'metar' && t !== wx.metar) {
-                    wx.metar = t;
-                    drawWind();
-                }
+                if (kind === 'metar') wind.update({ metar: t });
             } catch (e) {
                 $(kind).textContent = 'NOT AVAILABLE';
             }
@@ -134,7 +119,6 @@
 
     // Floating windows: WIND then LAST 24H down the left, GO-AROUNDS top right (defaults)
     const top = () => Float.minTop() + Float.MARGIN;
-    drawWind();
     const windFloat = $('windFloat');
     Float.make(windFloat, {
         key: 'wind', button: $('windBtn'),
@@ -166,7 +150,7 @@
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
         onGa: () => ga.toggle(),
         onIncrease: () => view.refresh(),
-        onRunway: rwy => { wx.runway = rwy; drawWind(); },
+        onRunway: rwy => wind.update({ runway: rwy }),
     });
     window.addEventListener('resize', () => { settle = true; });
     if (typeof ResizeObserver !== 'undefined') {

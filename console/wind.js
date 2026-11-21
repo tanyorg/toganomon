@@ -2,7 +2,9 @@
 // airport's runways (true tracks from go-arounds.json's airport block; METAR
 // wind is true as well), and the head/cross components on the runway in use,
 // the same way toganomon.py computes them for a go-around.
-// Everything but Wind.draw is DOM-free (tests/console_test.js).
+// Wind.mount(element) builds the whole panel (dial and text) and returns
+// { update({ metar, airport, runway }) }: pass any of the three as they come.
+// Everything but Wind.draw and Wind.mount is DOM-free (tests/console_test.js).
 (function (root) {
     'use strict';
 
@@ -78,10 +80,19 @@
     function speedText(w) {
         if (!w) return '-- kt';
         if (w.calm) return `0 ${w.unit}`;
-        return `${w.spd}${w.gust !== null ? 'G' + w.gust : ''} ${w.unit}`;
+        return `${w.spd} ${w.unit}`;
     }
 
-    const Wind = { parseWind, runwayEnds, components, componentText, windLines, dirText, speedText };
+    function gustText(w) {
+        return w && !w.calm && w.gust !== null ? `GUST ${w.gust}${w.unit}` : null;
+    }
+
+    function varText(w) {
+        return w && w.varFrom !== null
+            ? `${String(w.varFrom).padStart(3, '0')}V${String(w.varTo).padStart(3, '0')}` : null;
+    }
+
+    const Wind = { parseWind, runwayEnds, components, componentText, windLines, dirText, speedText, gustText, varText };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Wind;
         return;
@@ -135,5 +146,53 @@
             g.appendChild(el('path', { d: 'M -8 14 L 0 30 L 8 14 Z' }));
             svg.appendChild(g);
         }
+    };
+
+    // The WIND panel: dial, direction, speed, gust badge, variable sector,
+    // head/cross components. Styles: wind.css.
+    Wind.mount = function (container) {
+        const div = (cls) => {
+            const d = document.createElement('div');
+            d.className = cls;
+            return d;
+        };
+        container.classList.add('wind-panel');
+        const svg = el('svg', { class: 'wind-svg', viewBox: '-70 -70 140 140', role: 'img', 'aria-label': 'wind and runways' });
+        const dir = div('wind-dir'), spd = div('wind-spd'), gust = div('wind-gust-line'), vr = div('wind-var-text'), comp = div('wind-comp');
+        container.replaceChildren(svg, dir, spd, gust, vr, comp);
+        const st = { metar: null, airport: null, runway: null };
+
+        function render() {
+            const w = parseWind(st.metar);
+            Wind.draw(svg, w, st.airport, st.runway);
+            dir.textContent = dirText(w);
+            spd.textContent = speedText(w);
+            gust.replaceChildren();
+            const g = gustText(w);
+            if (g) {
+                const b = document.createElement('span');
+                b.className = 'wind-gust-badge';
+                b.textContent = g;
+                gust.append(b);
+            }
+            gust.hidden = !g;
+            vr.textContent = varText(w) || '';
+            vr.hidden = !varText(w);
+            comp.textContent = windLines(w, st.airport, st.runway).join('\n');
+        }
+
+        render();
+        return {
+            update(part) {
+                let changed = false;
+                for (const k of ['metar', 'airport', 'runway']) {
+                    if (part && k in part && part[k] !== st[k]) {
+                        st[k] = part[k];
+                        changed = true;
+                    }
+                }
+                if (changed) render();
+            },
+        };
     };
 })(typeof window !== 'undefined' ? window : globalThis);
