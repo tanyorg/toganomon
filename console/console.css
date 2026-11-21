@@ -124,7 +124,7 @@ button.stat:hover { border-color: var(--dim); }
 .ga-float {
     display: flex;
     flex-direction: column;
-    width: 400px;
+    width: 600px;               /* figure (~330 px) right of its legend */
     height: 70vh;
     min-width: 280px;
     min-height: 160px;

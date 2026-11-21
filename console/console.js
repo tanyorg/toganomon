@@ -160,23 +160,30 @@
     });
     const view = GoAroundView.mount($('gaList'), { url: DATA + 'go-arounds.json', timeZone });
     const gaFloat = $('gaFloat');
-    const ga = Float.make(gaFloat, {
-        key: 'ga', button: $('gaBtn'),
-        at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
-        onOpen: () => view.fit(),
-    });
-    $('gaTile').addEventListener('click', () => ga.open());
-    // remember the size the window was resized to, and re-lay out the figures
-    const size = Float.size('ga');
+    // A size the user gave the window by its corner; else the CSS default,
+    // wide enough for a track figure beside its legend.
+    const size = Float.size('ga-size');
     if (size) {
         gaFloat.style.width = size.width + 'px';
         gaFloat.style.height = size.height + 'px';
     }
+    let settle = true;      // the next size change is not the user's
+    const ga = Float.make(gaFloat, {
+        key: 'ga', button: $('gaBtn'),
+        at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
+        onOpen: () => { settle = true; view.fit(); },
+    });
+    $('gaTile').addEventListener('click', () => ga.toggle());
+    window.addEventListener('resize', () => { settle = true; });
     if (typeof ResizeObserver !== 'undefined') {
+        let last = null;
         new ResizeObserver(() => {
             if (gaFloat.hidden) return;
             view.fit();
-            Float.size('ga', { width: gaFloat.offsetWidth, height: gaFloat.offsetHeight });
+            const now = { width: gaFloat.offsetWidth, height: gaFloat.offsetHeight };
+            if (!settle && last && (now.width !== last.width || now.height !== last.height)) Float.size('ga-size', now);
+            settle = false;
+            last = now;
         }).observe(gaFloat);
     }
 })(typeof window !== 'undefined' ? window : globalThis);
