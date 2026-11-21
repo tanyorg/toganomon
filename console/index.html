@@ -22,6 +22,7 @@
             <div class="clock"><span class="clock-label" id="clockLocalLabel">LOCAL</span><span id="clockLocal" class="clock-val">--:--:--</span></div>
         </div>
         <nav class="buttons" aria-label="windows">
+            <button class="win-btn" id="windBtn" title="WIND" aria-label="WIND">🧭</button>
             <button class="win-btn" id="statsBtn" title="LAST 24H" aria-label="LAST 24H">📊</button>
             <button class="win-btn" id="gaBtn" title="GO-AROUNDS" aria-label="GO-AROUNDS">🛫</button>
         </nav>
@@ -29,6 +30,17 @@
     <main>
         <iframe id="map" title="tar1090" src="about:blank"></iframe>
     </main>
+
+    <section class="float wind-float" id="windFloat" aria-label="WIND" hidden>
+        <div class="float-bar"><span>WIND</span><button class="float-close" aria-label="close">×</button></div>
+        <div class="float-body wind-body">
+            <svg id="windDial" class="wind-svg" viewBox="-70 -70 140 140" role="img" aria-label="wind and runways"></svg>
+            <div class="wind-dir" id="windDir">---°</div>
+            <div class="wind-spd" id="windSpd">-- kt</div>
+            <div class="wind-var-text" id="windVar"></div>
+            <div class="wind-comp" id="windComp"></div>
+        </div>
+    </section>
 
     <section class="float stats-float" id="statsFloat" aria-label="LAST 24H" hidden>
         <div class="float-bar"><span>LAST 24H</span><button class="float-close" aria-label="close">×</button></div>
@@ -50,6 +62,7 @@
 
     <script src="/web/goaround.js"></script>
     <script src="float.js"></script>
+    <script src="wind.js"></script>
     <script src="console.js"></script>
 </body>
 </html>

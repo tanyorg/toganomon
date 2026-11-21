@@ -120,6 +120,23 @@ button.stat:hover { border-color: var(--dim); }
 .updated { margin-top: 6px; font-size: 0.62rem; color: var(--dim); text-align: right; }
 .updated.stale { color: #f85149; }
 
+/* WIND (wind.js) */
+.wind-float { width: 180px; }
+.wind-body { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wind-svg { width: 140px; height: 140px; }
+.wind-dial { fill: rgba(13, 17, 23, 0.6); stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.wind-cardinal { fill: var(--dim); font-size: 9px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+.wind-rwy { stroke: rgba(139, 148, 158, 0.55); stroke-width: 5; stroke-linecap: butt; }
+.wind-rwy-name { fill: var(--dim); font-size: 9px; text-anchor: middle; dominant-baseline: central; }
+.wind-rwy-name.in-use { fill: var(--accent); font-weight: bold; }
+.wind-var { fill: none; stroke: #ffa657; stroke-width: 3; opacity: 0.6; }
+.wind-arrow line { stroke: #ffa657; stroke-width: 3; }
+.wind-arrow path { fill: #ffa657; }
+.wind-dir { font-size: 1.1rem; font-weight: bold; color: #ffa657; }
+.wind-spd { font-size: 0.9rem; }
+.wind-var-text, .wind-comp { font-size: 0.65rem; color: var(--dim); text-align: center; }
+.wind-comp { color: var(--fg); margin-top: 2px; white-space: pre-line; }
+
 /* GO-AROUNDS: resizable from the bottom-right corner; the list scrolls */
 .ga-float {
     display: flex;

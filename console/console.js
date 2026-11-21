@@ -99,11 +99,27 @@
         $('clockLocal').textContent = clockText(now, timeZone);
     }
 
+    // what the WIND window draws from
+    const wx = { airport: null, runway: null, metar: null };
+    function drawWind() {
+        const w = Wind.parseWind(wx.metar);
+        Wind.draw($('windDial'), w, wx.airport, wx.runway);
+        $('windDir').textContent = Wind.dirText(w);
+        $('windSpd').textContent = Wind.speedText(w);
+        $('windVar').textContent = w && w.varFrom !== null
+            ? `${String(w.varFrom).padStart(3, '0')}V${String(w.varTo).padStart(3, '0')}` : '';
+        $('windComp').textContent = Wind.windLines(w, wx.airport, wx.runway).join('\n');
+    }
+
     let mapSet = false;
     async function loadAirport() {
         try {
             const d = await getJson(DATA + 'go-arounds.json');
             const a = d && d.airport;
+            if (a) {
+                wx.airport = a;
+                drawWind();
+            }
             if (a && a.icao) {
                 $('icao').textContent = a.icao;
                 document.title = `${a.icao} · toganomon console`;
@@ -113,12 +129,17 @@
                 mapSet = true;
             }
         } catch (e) { /* not written yet */ }
-        if (!mapSet) setTimeout(loadAirport, 15000);
+        if (!mapSet || !wx.airport) setTimeout(loadAirport, 15000);
     }
 
     async function loadSummary() {
         try {
-            const v = summaryView(await getJson(DATA + 'summary.json'), Date.now() / 1000, timeZone);
+            const s = await getJson(DATA + 'summary.json');
+            const v = summaryView(s, Date.now() / 1000, timeZone);
+            if (s && (s.runway || null) !== wx.runway) {
+                wx.runway = s.runway || null;
+                drawWind();
+            }
             if (v) {
                 for (const k of ['arrivals', 'departures', 'runway', 'goArounds']) $(k).textContent = v[k];
                 $('gaTile').classList.toggle('hot', v.hot);
@@ -137,6 +158,10 @@
                 const t = await getText(DATA + kind + '.txt');
                 $(kind).textContent = t || '--';
                 $(kind).title = t;
+                if (kind === 'metar' && t !== wx.metar) {
+                    wx.metar = t;
+                    drawWind();
+                }
             } catch (e) {
                 $(kind).textContent = 'NOT AVAILABLE';
             }
@@ -152,11 +177,20 @@
     loadWx();
     setInterval(loadWx, WX_MS);
 
-    // Floating windows: LAST 24H top left, GO-AROUNDS top right (defaults)
+    // Floating windows: WIND then LAST 24H down the left, GO-AROUNDS top right (defaults)
     const top = () => Float.minTop() + Float.MARGIN;
+    drawWind();
+    const windFloat = $('windFloat');
+    Float.make(windFloat, {
+        key: 'wind', button: $('windBtn'),
+        at: () => ({ left: Float.MARGIN, top: top() }),
+    });
     Float.make($('statsFloat'), {
         key: 'stats', button: $('statsBtn'),
-        at: () => ({ left: Float.MARGIN, top: top() }),
+        at: () => ({
+            left: Float.MARGIN,
+            top: windFloat.hidden ? top() : windFloat.getBoundingClientRect().bottom + Float.MARGIN,
+        }),
     });
     const view = GoAroundView.mount($('gaList'), { url: DATA + 'go-arounds.json', timeZone });
     const gaFloat = $('gaFloat');
