@@ -1,0 +1,28 @@
+/* toganomon LAST 24H panel (stats.js). Dark theme; override as needed. */
+.st-panel { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #c9d1d9; }
+.st-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.st-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    padding: 4px 2px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+}
+button.st-tile { cursor: pointer; }
+button.st-tile:hover, button.st-tile:focus-visible { border-color: #8b949e; outline: none; }
+button.st-tile:disabled { cursor: default; }
+.st-val { font-size: 1.1rem; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.st-label { font-size: 0.55rem; color: #8b949e; letter-spacing: 0.06em; white-space: nowrap; }
+.st-on .st-val { color: #3fb950; }
+.st-hot .st-val { color: #d29922; }
+.st-flash { animation: st-flash 0.6s ease-in-out 6; }
+@keyframes st-flash { 50% { background: #d29922; } }
+.st-aircraft { margin-top: 6px; font-size: 0.65rem; color: #8b949e; text-align: center; }
+.st-time, .st-since { margin-top: 2px; font-size: 0.62rem; color: #8b949e; text-align: right; }
+.st-time.stale { color: #f85149; }
+.st-since { color: #d29922; }

@@ -1,0 +1,13 @@
+/* toganomon WIND dial (wind.js draws into an <svg viewBox="-70 -70 140 140">).
+   Dark theme; override as needed. */
+.wind-svg { width: 140px; height: 140px; }
+.wind-dial { fill: rgba(13, 17, 23, 0.6); stroke: #30363d; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.wind-cardinal { fill: #8b949e; font-size: 9px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+.wind-rwy { stroke: rgba(139, 148, 158, 0.55); stroke-width: 5; stroke-linecap: butt; }
+.wind-rwy-name { fill: #8b949e; font-size: 9px; font-family: monospace; text-anchor: middle; dominant-baseline: central; }
+.wind-rwy-name.in-use { fill: #f0b72f; font-weight: bold; }
+.wind-var { fill: none; stroke: #ffa657; stroke-width: 3; opacity: 0.6; }
+.wind-arrow line { stroke: #ffa657; stroke-width: 3; }
+.wind-arrow path { fill: #ffa657; }
+/* the head/cross components line(s) under the dial */
+.wind-comp { font-size: 0.65rem; color: #c9d1d9; text-align: center; margin-top: 2px; white-space: pre-line; }
