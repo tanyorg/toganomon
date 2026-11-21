@@ -121,7 +121,7 @@
             const v = summaryView(await getJson(DATA + 'summary.json'), Date.now() / 1000, timeZone);
             if (v) {
                 for (const k of ['arrivals', 'departures', 'runway', 'goArounds']) $(k).textContent = v[k];
-                $('goArounds').classList.toggle('hot', v.hot);
+                $('gaTile').classList.toggle('hot', v.hot);
                 $('updated').textContent = v.updated;
                 $('updated').classList.toggle('stale', v.stale);
             }
@@ -151,6 +151,32 @@
     setInterval(loadSummary, SUMMARY_MS);
     loadWx();
     setInterval(loadWx, WX_MS);
+
+    // Floating windows: LAST 24H top left, GO-AROUNDS top right (defaults)
+    const top = () => Float.minTop() + Float.MARGIN;
+    Float.make($('statsFloat'), {
+        key: 'stats', button: $('statsBtn'),
+        at: () => ({ left: Float.MARGIN, top: top() }),
+    });
     const view = GoAroundView.mount($('gaList'), { url: DATA + 'go-arounds.json', timeZone });
-    window.addEventListener('resize', () => view.fit());
+    const gaFloat = $('gaFloat');
+    const ga = Float.make(gaFloat, {
+        key: 'ga', button: $('gaBtn'),
+        at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
+        onOpen: () => view.fit(),
+    });
+    $('gaTile').addEventListener('click', () => ga.open());
+    // remember the size the window was resized to, and re-lay out the figures
+    const size = Float.size('ga');
+    if (size) {
+        gaFloat.style.width = size.width + 'px';
+        gaFloat.style.height = size.height + 'px';
+    }
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+            if (gaFloat.hidden) return;
+            view.fit();
+            Float.size('ga', { width: gaFloat.offsetWidth, height: gaFloat.offsetHeight });
+        }).observe(gaFloat);
+    }
 })(typeof window !== 'undefined' ? window : globalThis);
