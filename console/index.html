@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>toganomon console</title>
+    <link rel="stylesheet" href="/web/goaround.css">
+    <link rel="stylesheet" href="console.css">
+</head>
+<body>
+    <header>
+        <div class="airport">
+            <span class="icao" id="icao">----</span>
+            <span class="brand">toganomon</span>
+        </div>
+        <div class="wx">
+            <div class="wx-line"><span class="wx-label">METAR</span><span id="metar" class="wx-text">--</span></div>
+            <div class="wx-line"><span class="wx-label">TAF</span><span id="taf" class="wx-text">--</span></div>
+        </div>
+        <div class="clocks">
+            <div class="clock"><span class="clock-label">UTC</span><span id="clockUtc" class="clock-val">--:--:--</span></div>
+            <div class="clock"><span class="clock-label" id="clockLocalLabel">LOCAL</span><span id="clockLocal" class="clock-val">--:--:--</span></div>
+        </div>
+    </header>
+    <main>
+        <div class="map">
+            <iframe id="map" title="tar1090" src="about:blank"></iframe>
+        </div>
+        <aside class="side">
+            <section class="stats" aria-label="last 24 hours">
+                <div class="stat"><span class="stat-val" id="arrivals">--</span><span class="stat-label">ARR 24H</span></div>
+                <div class="stat"><span class="stat-val" id="departures">--</span><span class="stat-label">DEP 24H</span></div>
+                <div class="stat"><span class="stat-val" id="runway">--</span><span class="stat-label">RWY IN USE</span></div>
+                <div class="stat"><span class="stat-val" id="goArounds">--</span><span class="stat-label">GO-AROUND 24H</span></div>
+            </section>
+            <div class="updated" id="updated">UPDATED --</div>
+            <h2>GO-AROUNDS</h2>
+            <div id="gaList"></div>
+        </aside>
+    </main>
+    <script src="/web/goaround.js"></script>
+    <script src="console.js"></script>
+</body>
+</html>
