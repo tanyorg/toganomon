@@ -3,7 +3,7 @@
 //
 //   const stats = Stats.mount(element, {
 //       url: 'summary.json',          // polled every pollMs (60000)
-//       historyUrl: 'go-arounds.json', // for "LAST mm/dd" when 24 h has none
+//       historyUrl: 'go-arounds.json', // for "LAST GO-AROUND ..." when 24 h has none
 //       timeZone: 'UTC',
 //       onGa() {},                    // the G/A tile was clicked
 //       onIncrease(count) {},         // go-arounds went up while open
@@ -38,7 +38,8 @@
         const tz = timeZone || 'UTC';
         const active = typeof s.runway_t === 'number' && s.runway && s.now - s.runway_t <= RUNWAY_ACTIVE_S;
         const count = typeof s.go_arounds === 'number' ? s.go_arounds : null;
-        const times = (Array.isArray(history) ? history : []).map(g => g && g.t).filter(t => typeof t === 'number');
+        const past = (Array.isArray(history) ? history : []).filter(g => g && typeof g.t === 'number');
+        const latest = past.length ? past.reduce((a, b) => (b.t > a.t ? b : a)) : null;
         const partial = typeof s.started === 'number' && typeof s.window_s === 'number' && s.now - s.started < s.window_s;
         const age = nowSec - s.now;
         return {
@@ -48,7 +49,10 @@
             goArounds: num(count),
             count,
             hot: count > 0,
-            gaLast: count === 0 && times.length ? `LAST ${mmdd(Math.max(...times), tz)}` : null,
+            // 24 h without one: when the last one was (short form for compact rows)
+            gaLast: count === 0 && latest ? `LAST ${mmdd(latest.t, tz)}` : null,
+            lastGa: count === 0 && latest
+                ? `LAST GO-AROUND ${mmdd(latest.t, tz)} ${hhmm(latest.t, tz)}` + (latest.flight ? ` ${latest.flight}` : '') : null,
             aircraft: typeof s.total === 'number'
                 ? `${s.total} AIRCRAFT` + (typeof s.with_pos === 'number' ? ` · POS ${s.with_pos}` : '') : null,
             time: hhmm(s.now, tz),
@@ -97,11 +101,13 @@
         ga.t.classList.add('st-ga');
         ga.t.title = 'GO-AROUNDS';
         tiles.append(arr.t, dep.t, rwy.t, ga.t);
+        const lastGa = node('div', 'st-lastga');
+        lastGa.hidden = true;
         const aircraft = node('div', 'st-aircraft');
         const time = node('div', 'st-time', 'UPDATED --:--');
         const since = node('div', 'st-since');
         since.hidden = true;
-        container.replaceChildren(tiles, aircraft, time, since);
+        container.replaceChildren(tiles, lastGa, aircraft, time, since);
         if (o.onGa) ga.t.addEventListener('click', () => o.onGa());
         else ga.t.disabled = true;
 
@@ -134,7 +140,8 @@
             rwy.val.textContent = v.runway || '--';
             rwy.t.classList.toggle('st-on', !!v.runway);
             ga.val.textContent = v.goArounds;
-            ga.lab.textContent = v.gaLast || 'G/A';
+            lastGa.textContent = v.lastGa || '';
+            lastGa.hidden = !v.lastGa;
             ga.t.classList.toggle('st-hot', v.hot);
             aircraft.textContent = v.aircraft || '';
             aircraft.hidden = !v.aircraft;
