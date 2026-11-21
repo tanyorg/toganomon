@@ -78,6 +78,7 @@
 
     // WIND panel (wind.js); fed by loadAirport, loadWx and Stats' runway
     const wind = Wind.mount($('windBody'));
+    let stats = { setAirport() {} };     // Stats.mount below
 
     let mapSet = false;
     async function loadAirport() {
@@ -85,6 +86,7 @@
             const d = await getJson(DATA + 'go-arounds.json');
             const a = d && d.airport;
             if (a) wind.update({ airport: a });
+            if (a && a.icao) stats.setAirport(a.icao);
             if (a && a.icao) {
                 $('icao').textContent = a.icao;
                 document.title = `${a.icao} · toganomon console`;
@@ -146,7 +148,7 @@
         at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
         onOpen: () => { settle = true; view.fit(); },
     });
-    Stats.mount($('statsBody'), {
+    stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
         onGa: () => ga.toggle(),
         onIncrease: () => view.refresh(),

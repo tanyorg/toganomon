@@ -5,10 +5,11 @@
 //       url: 'summary.json',          // polled every pollMs (60000)
 //       historyUrl: 'go-arounds.json', // for "LAST GO-AROUND ..." when 24 h has none
 //       timeZone: 'UTC',
+//       airport: 'RJFF',              // caption over the airport's counts
 //       onGa() {},                    // the G/A tile was clicked
 //       onIncrease(count) {},         // go-arounds went up while open
 //       onRunway(rwy | null) {},      // runway in use changed (null: none)
-//   });                               // -> { refresh(), stop() }
+//   });                               // -> { refresh(), stop(), setAirport(icao) }
 //
 // Stats.view and Stats.increased do not touch the DOM (tests/console_test.js).
 (function (root) {
@@ -47,16 +48,17 @@
         const since = partial ? `${mmdd(s.started, tz)} ${hhmm(s.started, tz)}` : null;
         const time = hhmm(s.now, tz);
         const stale = age > STALE_S;
-        // the label/value rows under the tiles; level 'warn' / 'alert' colours a value
+        // label/value rows by group: 'airport' (under the tiles), 'receiver'
+        // (every aircraft received, not only the airport's), 'status' (both).
+        // sub: a part of the row above. level 'warn' / 'alert' colours a value.
         const rows = [];
-        if (lastGa) rows.push({ key: 'lastGa', label: 'LAST G/A', value: lastGa, level: null });
-        if (typeof s.total === 'number') {
-            rows.push({ key: 'aircraft', label: 'AIRCRAFT', level: null,
-                value: String(s.total) + (typeof s.with_pos === 'number' ? ` · POS ${s.with_pos}` : '') });
-        }
+        const row = (group, key, label, value, level, sub) => rows.push({ group, key, label, value, level: level || null, sub: !!sub });
+        if (lastGa) row('airport', 'lastGa', 'LAST G/A', lastGa);
+        if (typeof s.total === 'number') row('receiver', 'seen', 'AIRCRAFT SEEN', String(s.total));
+        if (typeof s.with_pos === 'number') row('receiver', 'withPos', 'WITH POSITION', String(s.with_pos), null, true);
         // counting began less than a window ago: say since when
-        if (since) rows.push({ key: 'since', label: 'SINCE', value: since, level: 'warn' });
-        rows.push({ key: 'updated', label: 'UPDATED', value: time, level: stale ? 'alert' : null });
+        if (since) row('status', 'since', 'SINCE', since, 'warn');
+        row('status', 'updated', 'UPDATED', time, stale ? 'alert' : null);
         return {
             arrivals: num(s.arrivals),
             departures: num(s.departures),
@@ -103,7 +105,7 @@
 
     Stats.mount = function (container, options) {
         const o = Object.assign({
-            url: 'summary.json', historyUrl: null, timeZone: 'UTC', pollMs: 60000,
+            url: 'summary.json', historyUrl: null, timeZone: 'UTC', pollMs: 60000, airport: null,
             onGa: null, onIncrease: null, onRunway: null,
         }, options || {});
         container.classList.add('st-panel');
@@ -112,20 +114,28 @@
         ga.t.classList.add('st-ga');
         ga.t.title = 'GO-AROUNDS';
         tiles.append(arr.t, dep.t, rwy.t, ga.t);
-        const rows = node('dl', 'st-rows');
-        container.replaceChildren(tiles, rows);
+        // RJFF-style caption over the airport part, RECEIVER over the rest
+        const capA = node('div', 'st-cap', o.airport || 'AIRPORT');
+        const capR = node('div', 'st-cap', 'RECEIVER');
+        const lists = { airport: node('dl', 'st-rows'), receiver: node('dl', 'st-rows'), status: node('dl', 'st-rows st-status') };
+        container.replaceChildren(capA, tiles, lists.airport, capR, lists.receiver, lists.status);
         if (o.onGa) ga.t.addEventListener('click', () => o.onGa());
         else ga.t.disabled = true;
 
         let last = null, runway, timer = null;
 
         function renderRows(list) {
-            rows.replaceChildren(...list.map(r => {
-                const row = node('div', 'st-row st-' + r.key.replace(/[A-Z]/g, c => '-' + c.toLowerCase()));
-                const dd = node('dd', r.level ? 'st-' + r.level : '', r.value);
-                row.append(node('dt', '', r.label), dd);
-                return row;
-            }));
+            for (const g in lists) {
+                const items = list.filter(r => r.group === g);
+                lists[g].replaceChildren(...items.map(r => {
+                    const cls = 'st-row st-' + r.key.replace(/[A-Z]/g, c => '-' + c.toLowerCase()) + (r.sub ? ' st-sub' : '');
+                    const el = node('div', cls);
+                    el.append(node('dt', '', r.label), node('dd', r.level ? 'st-' + r.level : '', r.value));
+                    return el;
+                }));
+                lists[g].hidden = !items.length;
+            }
+            capR.hidden = lists.receiver.hidden;
         }
 
         async function getJson(url) {
@@ -147,9 +157,9 @@
             const v = view(s, Date.now() / 1000, o.timeZone, history);
             if (!v) {
                 // keep what is shown; mark UPDATED, or say there is nothing yet
-                const upd = rows.querySelector('.st-updated dd');
+                const upd = lists.status.querySelector('.st-updated dd');
                 if (upd) upd.className = 'st-alert';
-                else renderRows([{ key: 'updated', label: 'UPDATED', value: 'NO DATA', level: 'alert' }]);
+                else renderRows([{ group: 'status', key: 'updated', label: 'UPDATED', value: 'NO DATA', level: 'alert' }]);
                 return;
             }
             arr.val.textContent = v.arrivals;
@@ -177,6 +187,7 @@
         return {
             refresh,
             stop() { if (timer) clearInterval(timer); timer = null; },
+            setAirport(icao) { capA.textContent = icao || 'AIRPORT'; },
         };
     };
 })(typeof window !== 'undefined' ? window : globalThis);
