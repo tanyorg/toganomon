@@ -42,6 +42,21 @@
         const latest = past.length ? past.reduce((a, b) => (b.t > a.t ? b : a)) : null;
         const partial = typeof s.started === 'number' && typeof s.window_s === 'number' && s.now - s.started < s.window_s;
         const age = nowSec - s.now;
+        const lastGa = count === 0 && latest
+            ? `${mmdd(latest.t, tz)} ${hhmm(latest.t, tz)}` + (latest.flight ? ` ${latest.flight}` : '') : null;
+        const since = partial ? `${mmdd(s.started, tz)} ${hhmm(s.started, tz)}` : null;
+        const time = hhmm(s.now, tz);
+        const stale = age > STALE_S;
+        // the label/value rows under the tiles; level 'warn' / 'alert' colours a value
+        const rows = [];
+        if (lastGa) rows.push({ key: 'lastGa', label: 'LAST G/A', value: lastGa, level: null });
+        if (typeof s.total === 'number') {
+            rows.push({ key: 'aircraft', label: 'AIRCRAFT', level: null,
+                value: String(s.total) + (typeof s.with_pos === 'number' ? ` · POS ${s.with_pos}` : '') });
+        }
+        // counting began less than a window ago: say since when
+        if (since) rows.push({ key: 'since', label: 'SINCE', value: since, level: 'warn' });
+        rows.push({ key: 'updated', label: 'UPDATED', value: time, level: stale ? 'alert' : null });
         return {
             arrivals: num(s.arrivals),
             departures: num(s.departures),
@@ -49,16 +64,12 @@
             goArounds: num(count),
             count,
             hot: count > 0,
-            // 24 h without one: when the last one was (short form for compact rows)
+            // 24 h without one: "LAST mm/dd" for compact displays
             gaLast: count === 0 && latest ? `LAST ${mmdd(latest.t, tz)}` : null,
-            lastGa: count === 0 && latest
-                ? `LAST GO-AROUND ${mmdd(latest.t, tz)} ${hhmm(latest.t, tz)}` + (latest.flight ? ` ${latest.flight}` : '') : null,
-            aircraft: typeof s.total === 'number'
-                ? `${s.total} AIRCRAFT` + (typeof s.with_pos === 'number' ? ` · POS ${s.with_pos}` : '') : null,
-            time: hhmm(s.now, tz),
-            stale: age > STALE_S,
-            // counting began less than a window ago: say since when
-            since: partial ? `${mmdd(s.started, tz)} ${hhmm(s.started, tz)}` : null,
+            rows,
+            time,
+            stale,
+            since,
         };
     }
 
@@ -101,17 +112,21 @@
         ga.t.classList.add('st-ga');
         ga.t.title = 'GO-AROUNDS';
         tiles.append(arr.t, dep.t, rwy.t, ga.t);
-        const lastGa = node('div', 'st-lastga');
-        lastGa.hidden = true;
-        const aircraft = node('div', 'st-aircraft');
-        const time = node('div', 'st-time', 'UPDATED --:--');
-        const since = node('div', 'st-since');
-        since.hidden = true;
-        container.replaceChildren(tiles, lastGa, aircraft, time, since);
+        const rows = node('dl', 'st-rows');
+        container.replaceChildren(tiles, rows);
         if (o.onGa) ga.t.addEventListener('click', () => o.onGa());
         else ga.t.disabled = true;
 
         let last = null, runway, timer = null;
+
+        function renderRows(list) {
+            rows.replaceChildren(...list.map(r => {
+                const row = node('div', 'st-row st-' + r.key.replace(/[A-Z]/g, c => '-' + c.toLowerCase()));
+                const dd = node('dd', r.level ? 'st-' + r.level : '', r.value);
+                row.append(node('dt', '', r.label), dd);
+                return row;
+            }));
+        }
 
         async function getJson(url) {
             const res = await fetch(url, { cache: 'no-store' });
@@ -131,8 +146,10 @@
             }
             const v = view(s, Date.now() / 1000, o.timeZone, history);
             if (!v) {
-                time.classList.add('stale');
-                if (arr.val.textContent === '--') time.textContent = 'NO DATA';
+                // keep what is shown; mark UPDATED, or say there is nothing yet
+                const upd = rows.querySelector('.st-updated dd');
+                if (upd) upd.className = 'st-alert';
+                else renderRows([{ key: 'updated', label: 'UPDATED', value: 'NO DATA', level: 'alert' }]);
                 return;
             }
             arr.val.textContent = v.arrivals;
@@ -140,15 +157,8 @@
             rwy.val.textContent = v.runway || '--';
             rwy.t.classList.toggle('st-on', !!v.runway);
             ga.val.textContent = v.goArounds;
-            lastGa.textContent = v.lastGa || '';
-            lastGa.hidden = !v.lastGa;
             ga.t.classList.toggle('st-hot', v.hot);
-            aircraft.textContent = v.aircraft || '';
-            aircraft.hidden = !v.aircraft;
-            time.textContent = `UPDATED ${v.time}`;
-            time.classList.toggle('stale', v.stale);
-            since.textContent = v.since ? `SINCE ${v.since}` : '';
-            since.hidden = !v.since;
+            renderRows(v.rows);
             if (increased(last, v.count)) {
                 ga.t.classList.remove('st-flash');
                 void ga.t.offsetWidth;          // restart the animation
