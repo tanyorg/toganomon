@@ -1,0 +1,70 @@
+# toganomon console with ultrafeeder (readsb + tar1090).
+#   cp .env.example .env && vi .env && docker compose up -d --build
+# then open http://<host>:${WEB_PORT}/
+#
+# The project name is fixed, so it never mixes with another compose project
+# that also lives in a directory called "docker".
+#
+# ultrafeeder here takes Beast from another receiver (BEAST_HOST:BEAST_PORT).
+# With a local RTL-SDR instead, follow ultrafeeder's README for the device
+# settings and keep READSB_EXTRA_ARGS and the two volumes below.
+name: toganomon
+
+services:
+  ultrafeeder:
+    image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest
+    container_name: toganomon-ultrafeeder
+    restart: unless-stopped
+    environment:
+      TZ: ${FEEDER_TZ:-UTC}
+      READSB_LAT: ${FEEDER_LAT:?set FEEDER_LAT in .env}
+      READSB_LON: ${FEEDER_LON:?set FEEDER_LON in .env}
+      READSB_ALT: ${FEEDER_ALT_M:-0}m
+      ULTRAFEEDER_CONFIG: adsb,${BEAST_HOST:?set BEAST_HOST in .env},${BEAST_PORT:-30005},beast_in
+      READSB_EXTRA_ARGS: --write-json-globe-index   # the traces toganomon reads
+      TAR1090_ENABLE_AC_DB: "true"
+      MLATHUB_DISABLE: "true"
+      GRAPHS1090_DISABLE: "true"
+    tmpfs:
+      - /run:exec,size=256M
+    volumes:
+      - readsb-run:/run/readsb              # shared with toganomon (tmpfs)
+      - globe-history:/var/globe_history    # state, heatmap, tar1090-db
+
+  toganomon:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: toganomon:local
+    container_name: toganomon
+    restart: unless-stopped
+    depends_on: [ultrafeeder]
+    environment:
+      TZ: ${FEEDER_TZ:-UTC}
+      TOGANOMON_ICAO: ${TOGANOMON_ICAO:?set TOGANOMON_ICAO in .env}
+    volumes:
+      - readsb-run:/run/readsb:ro
+      - globe-history:/var/globe_history:ro
+      - toganomon-state:/var/lib/toganomon
+      - toganomon-web:/srv/toganomon
+      # - ./toganomon.toml:/etc/toganomon.toml:ro   # your own configuration
+
+  web:
+    image: nginx:1.27-alpine
+    container_name: toganomon-web
+    restart: unless-stopped
+    depends_on: [ultrafeeder, toganomon]
+    ports:
+      - ${WEB_PORT:-8080}:80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../console:/usr/share/nginx/html:ro
+      - ../web:/srv/web:ro
+      - toganomon-web:/srv/toganomon:ro
+
+volumes:
+  readsb-run:
+    driver_opts: {type: tmpfs, device: tmpfs, o: "size=128m"}
+  globe-history:
+  toganomon-state:
+  toganomon-web:
