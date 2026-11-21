@@ -1,5 +1,5 @@
 // toganomon console: header (METAR / TAF / clocks), tar1090 map centred on
-// the airport, last-24-hour counts and the go-around list (GoAroundView).
+// the airport, LAST 24H (Stats), WIND (Wind) and GO-AROUNDS (GoAroundView).
 // Data, all from the same origin (docker/nginx.conf):
 //   /toganomon/summary.json, /toganomon/go-arounds.json  (toganomon.py)
 //   /toganomon/metar.txt, /toganomon/taf.txt              (fetch_wx.py)
@@ -12,7 +12,6 @@
     const DATA = '/toganomon/';
     const SUMMARY_MS = 30000;
     const WX_MS = 300000;
-    const STALE_S = 180;          // summary older than this: shown in red
     const MAP_ZOOM = 10;
 
     function mapUrl(airport, zoom) {
@@ -22,28 +21,6 @@
             p.set('lon', airport.arp[1].toFixed(4));
         }
         return '/tar1090/?' + p.toString();
-    }
-
-    // summary.json -> what the four tiles and the UPDATED line show
-    function summaryView(s, nowSec, timeZone) {
-        if (!s || typeof s.now !== 'number') return null;
-        const age = nowSec - s.now;
-        const t = new Intl.DateTimeFormat('en-GB', {
-            timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-        }).format(new Date(s.now * 1000));
-        return {
-            arrivals: num(s.arrivals),
-            departures: num(s.departures),
-            runway: s.runway || '--',
-            goArounds: num(s.go_arounds),
-            hot: (s.go_arounds || 0) > 0,
-            updated: `UPDATED ${t}` + (age > STALE_S ? ` (${Math.round(age / 60)} MIN AGO)` : ''),
-            stale: age > STALE_S,
-        };
-    }
-
-    function num(v) {
-        return typeof v === 'number' ? String(v) : '--';
     }
 
     function clockText(date, timeZone) {
@@ -69,7 +46,7 @@
         return offset || 'UTC';
     }
 
-    const Console = { mapUrl, summaryView, clockText, zoneLabel };
+    const Console = { mapUrl, clockText, zoneLabel };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Console;
         return;
@@ -132,26 +109,6 @@
         if (!mapSet || !wx.airport) setTimeout(loadAirport, 15000);
     }
 
-    async function loadSummary() {
-        try {
-            const s = await getJson(DATA + 'summary.json');
-            const v = summaryView(s, Date.now() / 1000, timeZone);
-            if (s && (s.runway || null) !== wx.runway) {
-                wx.runway = s.runway || null;
-                drawWind();
-            }
-            if (v) {
-                for (const k of ['arrivals', 'departures', 'runway', 'goArounds']) $(k).textContent = v[k];
-                $('gaTile').classList.toggle('hot', v.hot);
-                $('updated').textContent = v.updated;
-                $('updated').classList.toggle('stale', v.stale);
-            }
-        } catch (e) {
-            $('updated').textContent = 'NO DATA';
-            $('updated').classList.add('stale');
-        }
-    }
-
     async function loadWx() {
         for (const kind of ['metar', 'taf']) {
             try {
@@ -172,8 +129,6 @@
     tickClocks();
     setInterval(tickClocks, 1000);
     loadAirport();
-    loadSummary();
-    setInterval(loadSummary, SUMMARY_MS);
     loadWx();
     setInterval(loadWx, WX_MS);
 
@@ -207,7 +162,12 @@
         at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
         onOpen: () => { settle = true; view.fit(); },
     });
-    $('gaTile').addEventListener('click', () => ga.toggle());
+    Stats.mount($('statsBody'), {
+        url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
+        onGa: () => ga.toggle(),
+        onIncrease: () => view.refresh(),
+        onRunway: rwy => { wx.runway = rwy; drawWind(); },
+    });
     window.addEventListener('resize', () => { settle = true; });
     if (typeof ResizeObserver !== 'undefined') {
         let last = null;
