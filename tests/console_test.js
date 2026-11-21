@@ -91,17 +91,20 @@ const NOW = Date.UTC(2026, 10, 13, 7, 42, 0) / 1000;
 const SUM = { now: NOW, window_s: 86400, total: 187, with_pos: 162, started: NOW - 2 * 86400,
     arrivals: 212, departures: 193, runway: '16', runway_t: NOW - 120, go_arounds: 3 };
 
-t('Stats.view: tiles, aircraft line, update time in the given zone', () => {
+t('Stats.view: tiles and label/value rows, times in the given zone', () => {
     const v = S.view(SUM, NOW + 30, 'Asia/Tokyo');
-    assert.deepStrictEqual(v, {
-        arrivals: '212', departures: '193', runway: '16', goArounds: '3', count: 3, hot: true, gaLast: null, lastGa: null,
-        aircraft: '187 AIRCRAFT · POS 162', time: '16:42', stale: false, since: null });
+    assert.deepStrictEqual([v.arrivals, v.departures, v.runway, v.goArounds, v.count, v.hot, v.gaLast],
+        ['212', '193', '16', '3', 3, true, null]);
+    assert.deepStrictEqual(v.rows, [
+        { key: 'aircraft', label: 'AIRCRAFT', value: '187 · POS 162', level: null },
+        { key: 'updated', label: 'UPDATED', value: '16:42', level: null }]);
     assert.strictEqual(S.view(SUM, NOW, 'UTC').time, '07:42');
 });
 
 t('Stats.view: stale after 3 minutes', () => {
     assert.strictEqual(S.view(SUM, NOW + 180, 'UTC').stale, false);
     assert.strictEqual(S.view(SUM, NOW + 181, 'UTC').stale, true);
+    assert.strictEqual(S.view(SUM, NOW + 181, 'UTC').rows.find(r => r.key === 'updated').level, 'alert');
 });
 
 t('Stats.view: no runway in use after an hour without movements', () => {
@@ -113,21 +116,25 @@ t('Stats.view: no runway in use after an hour without movements', () => {
 t('Stats.view: last go-around date only when 24 h has none', () => {
     const hist = [{ t: NOW - 3 * 86400, flight: 'ANA267' }, { t: NOW - 5 * 86400, flight: 'JAL329' }];   // 11/10 16:42 JST
     const v = S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', hist);
-    assert.deepStrictEqual([v.goArounds, v.hot, v.gaLast, v.lastGa], ['0', false, 'LAST 11/10', 'LAST GO-AROUND 11/10 16:42 ANA267']);
-    assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'UTC', [{ t: NOW - 600, flight: null }]).lastGa, 'LAST GO-AROUND 11/13 07:32');
+    assert.deepStrictEqual([v.goArounds, v.hot, v.gaLast], ['0', false, 'LAST 11/10']);
+    assert.deepStrictEqual(v.rows[0], { key: 'lastGa', label: 'LAST G/A', value: '11/10 16:42 ANA267', level: null });
+    assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'UTC', [{ t: NOW - 600, flight: null }]).rows[0].value, '11/13 07:32');
     assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', [...hist].reverse()).gaLast, 'LAST 11/10');
     assert.strictEqual(S.view({ ...SUM, go_arounds: 0 }, NOW, 'Asia/Tokyo', []).gaLast, null);
     assert.strictEqual(S.view(SUM, NOW, 'Asia/Tokyo', hist).gaLast, null);
-    assert.strictEqual(S.view(SUM, NOW, 'Asia/Tokyo', hist).lastGa, null);
+    assert.strictEqual(S.view(SUM, NOW, 'Asia/Tokyo', hist).rows[0].key, 'aircraft');
 });
 
 t('Stats.view: since when, during the first window', () => {
-    assert.strictEqual(S.view({ ...SUM, started: NOW - 3600 }, NOW, 'Asia/Tokyo').since, '11/13 15:42');
+    const v = S.view({ ...SUM, started: NOW - 3600 }, NOW, 'Asia/Tokyo');
+    assert.strictEqual(v.since, '11/13 15:42');
+    assert.deepStrictEqual(v.rows.map(r => [r.label, r.level]), [['AIRCRAFT', null], ['SINCE', 'warn'], ['UPDATED', null]]);
 });
 
 t('Stats.view: older or partial summaries', () => {
     const v = S.view({ now: NOW, total: 5 }, NOW, 'UTC');
-    assert.deepStrictEqual([v.arrivals, v.runway, v.goArounds, v.count, v.aircraft], ['--', null, '--', null, '5 AIRCRAFT']);
+    assert.deepStrictEqual([v.arrivals, v.runway, v.goArounds, v.count], ['--', null, '--', null]);
+    assert.strictEqual(v.rows[0].value, '5');
     assert.strictEqual(S.view(null, NOW, 'UTC'), null);
     assert.strictEqual(S.view({ total: 1 }, NOW, 'UTC'), null);
 });
