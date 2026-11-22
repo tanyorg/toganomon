@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests for the DOM-free parts of console/wind.js, console/stats.js,
-// console/float.js and console/console.js. Run: node tests/console_test.js
+// console/clock.js, console/float.js and console/console.js. Run: node tests/console_test.js
 'use strict';
 const assert = require('assert');
 const path = require('path');
@@ -8,6 +8,7 @@ const W = require(path.join(__dirname, '..', 'console', 'wind.js'));
 const F = require(path.join(__dirname, '..', 'console', 'float.js'));
 const C = require(path.join(__dirname, '..', 'console', 'console.js'));
 const S = require(path.join(__dirname, '..', 'console', 'stats.js'));
+const K = require(path.join(__dirname, '..', 'console', 'clock.js'));
 
 let failed = 0;
 function t(label, fn) {
@@ -149,10 +150,20 @@ t('Stats.increased: only a rise after the first poll', () => {
     assert.strictEqual(S.increased(2, undefined), false);
 });
 
-t('zoneLabel: abbreviation where one exists, else an offset', () => {
-    assert.strictEqual(C.zoneLabel('Asia/Tokyo'), 'JST');
-    assert.strictEqual(C.zoneLabel('UTC'), 'UTC');
-    assert.match(C.zoneLabel('Asia/Seoul'), /^(KST|UTC\+9)$/);
+t('Clock.format: the given zone, whatever the machine zone', () => {
+    // 2026-10-31 15:30:05Z: 00:30:05 JST on 11-01
+    const d = new Date('2026-10-31T15:30:05Z');
+    assert.strictEqual(K.format(d, 'Asia/Tokyo', true), '00:30:05');
+    assert.strictEqual(K.format(d, 'Asia/Tokyo', false), '00:30');
+    assert.strictEqual(K.format(d, 'UTC', true), '15:30:05');
+    assert.strictEqual(K.format(new Date('2026-11-01T00:00:00Z'), 'UTC', false), '00:00');   // h23, not 24:00
+    assert.strictEqual(K.format(new Date('2026-10-28T14:59:59Z'), 'Asia/Tokyo', true), '23:59:59');
+});
+
+t('Clock.zoneLabel: abbreviation where one exists, else an offset', () => {
+    assert.strictEqual(K.zoneLabel('Asia/Tokyo'), 'JST');
+    assert.strictEqual(K.zoneLabel('UTC'), 'UTC');
+    assert.match(K.zoneLabel('Asia/Seoul'), /^(KST|UTC\+9)$/);
 });
 
 if (failed) {

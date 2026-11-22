@@ -23,30 +23,7 @@
         return '/tar1090/?' + p.toString();
     }
 
-    function clockText(date, timeZone) {
-        return new Intl.DateTimeFormat('en-GB', {
-            timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-        }).format(date);
-    }
-
-    // Short label for a zone: an abbreviation such as "JST" or "CET" where a
-    // locale has one (en-US alone gives "GMT+9" for Asia/Tokyo), else "UTC+9".
-    const ZONE_LOCALES = ['en-US', 'en-GB', 'ja-JP', 'en-AU', 'en-IN', 'en-NZ'];
-    function zoneLabel(timeZone, date) {
-        let offset = null;
-        for (const loc of ZONE_LOCALES) {
-            try {
-                const part = new Intl.DateTimeFormat(loc, { timeZone, timeZoneName: 'short' })
-                    .formatToParts(date || new Date()).find(p => p.type === 'timeZoneName');
-                if (!part) continue;
-                if (/^[A-Z]{2,5}$/.test(part.value)) return part.value === 'GMT' ? 'UTC' : part.value;
-                if (offset === null && /^GMT[+-]/.test(part.value)) offset = part.value.replace('GMT', 'UTC');
-            } catch (e) { return String(timeZone).split('/').pop().toUpperCase(); }
-        }
-        return offset || 'UTC';
-    }
-
-    const Console = { mapUrl, clockText, zoneLabel };
+    const Console = { mapUrl };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Console;
         return;
@@ -56,7 +33,7 @@
     // ---------- page ----------
     const $ = id => document.getElementById(id);
     const q = new URLSearchParams(location.search);
-    const timeZone = q.get('tz') || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const timeZone = q.get('tz') || Clock.browserZone();
 
     async function getJson(url) {
         const res = await fetch(url, { cache: 'no-store' });
@@ -70,11 +47,6 @@
         return (await res.text()).trim();
     }
 
-    function tickClocks() {
-        const now = new Date();
-        $('clockUtc').textContent = clockText(now, 'UTC');
-        $('clockLocal').textContent = clockText(now, timeZone);
-    }
 
     // WIND panel (wind.js); fed by loadAirport, loadWx and Stats' runway
     const wind = Wind.mount($('windBody'));
@@ -112,9 +84,7 @@
         }
     }
 
-    $('clockLocalLabel').textContent = zoneLabel(timeZone);
-    tickClocks();
-    setInterval(tickClocks, 1000);
+    Clock.start({ utc: $('clockUtc'), local: $('clockLocal'), label: $('clockLocalLabel'), timeZone });
     loadAirport();
     loadWx();
     setInterval(loadWx, WX_MS);
