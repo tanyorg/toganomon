@@ -134,19 +134,11 @@
         }),
     });
     const view = GoAroundView.mount($('gaList'), { url: DATA + 'go-arounds.json', timeZone });
-    const gaFloat = $('gaFloat');
-    // A size the user gave the window by its corner; else the CSS default,
-    // wide enough for a track figure beside its legend.
-    const size = Float.size('ga-size');
-    if (size) {
-        gaFloat.style.width = size.width + 'px';
-        gaFloat.style.height = size.height + 'px';
-    }
-    let settle = true;      // the next size change is not the user's
-    const ga = Float.make(gaFloat, {
-        key: 'ga', button: $('gaBtn'),
+    const ga = Float.make($('gaFloat'), {
+        key: 'ga', button: $('gaBtn'), resizable: true,
         at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
-        onOpen: () => { settle = true; view.fit(); },
+        onOpen: () => view.fit(),
+        onResize: () => view.fit(),
     });
     stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
@@ -154,16 +146,4 @@
         onIncrease: () => view.refresh(),
         onRunway: rwy => wind.update({ runway: rwy }),
     });
-    window.addEventListener('resize', () => { settle = true; });
-    if (typeof ResizeObserver !== 'undefined') {
-        let last = null;
-        new ResizeObserver(() => {
-            if (gaFloat.hidden) return;
-            view.fit();
-            const now = { width: gaFloat.offsetWidth, height: gaFloat.offsetHeight };
-            if (!settle && last && (now.width !== last.width || now.height !== last.height)) Float.size('ga-size', now);
-            settle = false;
-            last = now;
-        }).observe(gaFloat);
-    }
 })(typeof window !== 'undefined' ? window : globalThis);
