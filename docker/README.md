@@ -1,28 +1,18 @@
-# toganomon with docker
+# toganomon with docker: details
 
-Three containers behind one web port:
+Start, configuration and updating are in the [README](../README.md#quick-start-docker).
+This page has what you need less often.
 
-| service | image | does |
-|---|---|---|
-| `ultrafeeder` | [sdr-enthusiasts/docker-adsb-ultrafeeder](https://github.com/sdr-enthusiasts/docker-adsb-ultrafeeder) | readsb + tar1090; takes Beast from a receiver and writes `/run/readsb` (shared, tmpfs) |
-| `toganomon` | built from this repository | `toganomon.py` every minute, `fetch_wx.py` for the METAR (10 min) and TAF (30 min) |
-| `web` | nginx | the console at `/`, the JSON at `/toganomon/`, tar1090 at `/tar1090/` |
+| file | what |
+|---|---|
+| `compose.yaml` | the three services; the project name is fixed to `toganomon` |
+| `.env.example` | copy to `.env` (not committed) |
+| `Dockerfile`, `entrypoint.sh` | the worker: writes a minimal configuration from `TOGANOMON_ICAO` unless `/etc/toganomon.toml` is mounted, then runs `toganomon.py` every minute and `fetch_wx.py` for the METAR and TAF |
+| `nginx.conf` | one origin for the console (`../console`), the go-around view parts (`../web`), the worker's output and ultrafeeder's tar1090 |
 
-## Start
-
-```sh
-cd docker
-cp .env.example .env
-vi .env                       # airport, receiver position, Beast source, port
-docker compose up -d --build
-```
-
-Open `http://<host>:<WEB_PORT>/`. The 24-hour counts start from zero:
-ultrafeeder only has the traces since it started.
-
-The airport must be in `airports.json`; for any other airport, write a
-configuration as in [INSTALL.md](../docs/INSTALL.md) and mount it at
-`/etc/toganomon.toml` (see the commented line in `compose.yaml`).
+The worker takes `FETCH_WX=0` to skip NOAA (then there is no wind and no
+QNH correction of the gate altitudes) and `AIRCRAFT_DB` for another
+tar1090-db directory.
 
 ## Starting with an existing history
 
