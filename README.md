@@ -51,7 +51,8 @@ vi .env                        # airport, receiver position, Beast source, port
 docker compose up -d --build
 ```
 
-Then open `http://<host>:8080/` (`WEB_PORT`).
+Then open `http://<host>:8080/` (`WEB_PORT`). The console has no login:
+keep it on your LAN (or behind a VPN), not open to the internet.
 
 This starts three containers:
 
