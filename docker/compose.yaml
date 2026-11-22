@@ -12,7 +12,8 @@ name: toganomon
 
 services:
   ultrafeeder:
-    image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest
+    # pinned to the build this was tested with; see "Updating" in README.md
+    image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest-build-993
     container_name: toganomon-ultrafeeder
     restart: unless-stopped
     environment:
@@ -50,7 +51,7 @@ services:
       # - ./toganomon.toml:/etc/toganomon.toml:ro   # your own configuration
 
   web:
-    image: nginx:1.27-alpine
+    image: nginx:1.27.5-alpine
     container_name: toganomon-web
     restart: unless-stopped
     depends_on: [ultrafeeder, toganomon]

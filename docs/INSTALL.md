@@ -1,5 +1,10 @@
 # Installing and configuring toganomon
 
+This is the manual install, for adding toganomon to a readsb you already
+run, without Docker. Most people want the Docker quick start in the
+[README](../README.md#quick-start-docker); the configuration keys below apply
+there too (mount your own file at `/etc/toganomon.toml`).
+
 ## 1. Requirements
 
 | What | Requirement |
