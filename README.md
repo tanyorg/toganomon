@@ -3,16 +3,11 @@
 > **toganomon** — named after TOGA (Take-Off/Go-Around), the thrust setting
 > a pilot selects to go around, plus *-nomon* for monitor.
 
-Counts an airport's arrivals and departures and detects probable go-arounds
-from the per-aircraft traces of [readsb](https://github.com/wiedehopf/readsb)
-(the decoder behind tar1090), and publishes them as JSON for a web view.
+Watches an airport from your ADS-B receiver: counts its arrivals and
+departures, detects probable go-arounds and shows them in a browser over a
+tar1090 map, with the METAR wind on the runways.
 
-A go-around is an arrival through a runway gate followed by a departure of
-the same aircraft on the same runway within a few minutes. A departure needs
-a real climb (200 ft within 30 s), not just a positive vertical rate, so a
-gusty final does not fake one. Each one is kept
-with the METAR wind, what happened next (landed / went around again / did not
-land) and a thinned track in runway coordinates.
+![toganomon console at Fukuoka (RJFF): WIND, LAST 24H and GO-AROUNDS windows over the tar1090 map](docs/console.webp)
 
 Status: extracted from a home receiver setup at Fukuoka (RJFF), where it has
 run since November 2026.
@@ -21,36 +16,66 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 (GNSS/NMEA and PPS monitors) and [aisnomon](https://github.com/tanyorg/aisnomon)
 (AIS reception monitor).
 
-## Requirements
+## What it does
 
-- readsb writing traces: `--write-json-globe-index` (the files
-  `traces/<xx>/trace_full_<hex>.json` and `trace_recent_<hex>.json`)
-- Python 3.11 or later (standard library only)
-- Optional: a raw METAR text file for the airport, for the QNH correction of
-  the gate altitudes and the wind at each go-around
+- **Go-arounds.** An arrival through a runway gate (low, on the extended
+  centreline, heading along the runway) followed by a departure of the same
+  aircraft on the same runway within 10 minutes. A departure needs a real
+  climb (200 ft within 30 s), so a gusty final does not fake one. Each
+  go-around is kept with the METAR wind and its head/cross components, what
+  happened next (landed / went around again / did not land), the
+  registration and type, and a thinned track.
+- **The console**, one page with floating windows over the tar1090 map:
+  - **WIND**: the METAR wind over a compass with the runways at their true
+    tracks, gust, variable sector and the components on the runway in use.
+  - **LAST 24H**: arrivals, departures, the runway in use, go-arounds, the
+    last go-around when there was none in 24 hours, and the aircraft the
+    receiver saw.
+  - **GO-AROUNDS**: every go-around; each opens to a north-up track figure.
+  - METAR and TAF in the header, UTC and local clocks.
 
-## Setup
+It reads [readsb](https://github.com/wiedehopf/readsb)'s per-aircraft
+traces; it does not decode radio itself.
+
+## Quick start (Docker)
+
+You need Docker with the compose plugin, and ADS-B data: either a receiver
+that gives Beast output on TCP 30005 (readsb, dump1090-fa / PiAware, an
+ultrafeeder you already run, ...) or an RTL-SDR on this host.
 
 ```sh
-sudo install -m 0755 toganomon.py /usr/local/bin/
-sudo install -D -m 0644 airports.json /usr/local/share/toganomon/airports.json
-sudo cp examples/rjff.toml /etc/toganomon.toml   # then edit it for your airport
-# every minute, e.g. in /etc/crontab:
-# * * * * * root /usr/local/bin/toganomon.py >> /var/log/toganomon.log 2>&1
+git clone https://github.com/tanyorg/toganomon.git
+cd toganomon/docker
+cp .env.example .env
+vi .env                        # airport, receiver position, Beast source, port
+docker compose up -d --build
 ```
 
-For an airport in [`airports.json`](airports.json) the configuration needs
-only its ICAO code: the reference point, the elevation and the runway gates
-come from there. For any other airport it describes the reference point,
-the elevation and one `[[runway]]` per runway or group of close parallel
-runways (its two designators, the true track of the first one and the gate
-around its extended centreline). Either way it also holds the gate
-altitudes (above the airport) and the file paths. See
-[`examples/rjff.toml`](examples/rjff.toml).
+Then open `http://<host>:8080/` (`WEB_PORT`).
 
-### Airport data
+This starts three containers:
 
-`airports.json` holds only Fukuoka (RJFF) for now. More airports are
+| service | does |
+|---|---|
+| `ultrafeeder` | [docker-adsb-ultrafeeder](https://github.com/sdr-enthusiasts/docker-adsb-ultrafeeder): readsb + tar1090. Takes Beast from `BEAST_HOST:BEAST_PORT` and writes the traces toganomon reads |
+| `toganomon` | built from this repository: detection every minute, METAR every 10 and TAF every 30 minutes from NOAA |
+| `web` | nginx: the console at `/`, the JSON at `/toganomon/`, tar1090 at `/tar1090/` |
+
+- **Already running a receiver?** Point `BEAST_HOST` at it. The bundled
+  readsb only reads its Beast output; nothing changes on your receiver,
+  and the stack feeds no aggregator.
+- **RTL-SDR on this host?** Add the device settings from ultrafeeder's
+  README to the `ultrafeeder` service (keep `READSB_EXTRA_ARGS` and the two
+  volumes) and drop `ULTRAFEEDER_CONFIG`.
+- **The first 24 hours** count only what was received since the start; the
+  LAST 24H window says SINCE when. To bring the go-around list of another
+  installation along, see [docker/README.md](docker/README.md).
+
+## Airport data
+
+An airport in [`airports.json`](airports.json) needs only its ICAO code
+(`TOGANOMON_ICAO`): the reference point, the elevation and the runway gates
+come from there. It holds only Fukuoka (RJFF) for now. More airports are
 welcome as pull requests:
 
 1. Draft the entry from [OurAirports](https://ourairports.com/data/)
@@ -58,57 +83,76 @@ welcome as pull requests:
    <ICAO>`. It takes the true track from the threshold positions and puts
    parallel runways less than 1 km apart into one gate.
 2. Check it against real traffic: run `toganomon.py --check-runways` on a
-   receiver that sees the airport's approaches. It measures the passes
-   through each gate (low, straight, along the runway) and prints the
-   measured true track and centreline offset with OK or CHECK.
+   receiver that sees the airport's approaches (in Docker:
+   `docker compose exec toganomon python3 /app/toganomon.py -c /var/lib/toganomon/toganomon.toml --check-runways`).
+   It measures the passes through each gate (low, straight, along the
+   runway) and prints the measured true track and centreline offset with
+   OK or CHECK.
 3. Put the result of the check in the entry's `checked`.
 
-[`docs/INSTALL.md`](docs/INSTALL.md) has the full walkthrough: preparing
-readsb (also on a host without an SDR), every configuration key, METAR,
-the aircraft database, a dedicated user, the web view and troubleshooting.
+For an airport not in the file, write a configuration with its reference
+point, elevation and runways as in [`examples/rjff.toml`](examples/rjff.toml)
+and mount it at `/etc/toganomon.toml` (the commented line in
+`docker/compose.yaml`).
+
+## Configuration
+
+`docker/.env`:
+
+| key | meaning |
+|---|---|
+| `TOGANOMON_ICAO` | the airport, e.g. `RJFF` (must be in `airports.json`, or mount your own configuration) |
+| `FEEDER_LAT`, `FEEDER_LON`, `FEEDER_ALT_M` | receiver position for readsb (decimal degrees, metres) |
+| `FEEDER_TZ` | time zone of the containers, e.g. `Asia/Tokyo` |
+| `BEAST_HOST`, `BEAST_PORT` | where ultrafeeder takes Beast from (port 30005 on most receivers) |
+| `WEB_PORT` | port of the console on this host (8080) |
+
+The console shows times in the browser's zone; add `?tz=Asia/Tokyo` to the
+URL for another. Every key of the detection (gate sizes and altitudes,
+go-around window, candidate radius, paths) is described in
+[docs/INSTALL.md](docs/INSTALL.md); put them in your own `toganomon.toml`.
+
+## Updating
+
+```sh
+cd toganomon && git pull
+cd docker && docker compose up -d --build
+```
+
+The go-around history and the state are on the `toganomon-state` volume and
+survive updates. The images are pinned to the versions this was tested
+with: ultrafeeder `latest-build-993` and nginx `1.27.5-alpine` (the worker
+uses `python:3.13-alpine`, which gets fixes on every build). To try a newer
+ultrafeeder, change its tag in `docker/compose.yaml`.
+
+## Without Docker
+
+toganomon itself is one Python script (3.11 or later, standard library
+only) run once a minute. To add it to a readsb you already run, without
+Docker, follow [docs/INSTALL.md](docs/INSTALL.md): readsb needs
+`--write-json-globe-index`, and the install uses cron and any web server.
+The `web/` go-around view works there on its own; the full console expects
+the Docker layout (`docker/nginx.conf`).
 
 ## Output
 
-- `summary` (JSON): aircraft received in the last 24 h, arrivals, departures,
+- `summary.json`: aircraft received in the last 24 h, arrivals, departures,
   the runway in use, go-arounds in the window.
-- `go_arounds` (JSON): every go-around, newest first, with the airport and
-  runway geometry for drawing the tracks.
-  `done` turns true once the entry is settled: its outcome no longer changes
-  (an arrival that looked like a landing can still become another go-around)
-  and the track is complete. `nth` is 2 (3, ...) when the same airframe
-  with the same callsign went around within the previous 2 hours. `reg` and
-  `type` (ICAO type designator) come from `aircraft_db`, a tar1090-db
-  directory (files of hex prefixes, as installed with tar1090 under
-  `git-db/db`); without it, or for an aircraft not in it, they are null.
-- `log` (optional, text): one tab-separated line per go-around: UTC time,
-  callsign, runway, hex.
-- `movements_log` (optional, text): one tab-separated line per arrival or
-  departure: UTC time, `arr`/`dep`, runway, hex, callsign, ground speed (kt),
-  emitter category (`-` when unknown). The long-term record of traffic, e.g.
-  for go-arounds per 100 arrivals. It is never rewritten; after the state is
-  lost the rebuilt 24 hours are appended again, so dedupe by time, kind and hex.
-- `history` / `state`: internal, keep them on persistent storage.
+- `go-arounds.json`: every go-around, newest first, with the airport and
+  runway geometry for drawing the tracks. `done` turns true once the entry
+  is settled: its outcome no longer changes (an arrival that looked like a
+  landing can still become another go-around) and the track is complete.
+  `nth` is 2 (3, ...) when the same airframe with the same callsign went
+  around within the previous 2 hours. `reg` and `type` (ICAO type
+  designator) come from the tar1090 aircraft database; null when unknown.
+- `movements.log`: one tab-separated line per arrival or departure: UTC
+  time, `arr`/`dep`, runway, hex, callsign, ground speed (kt), emitter
+  category. The long-term record of traffic, e.g. for go-arounds per 100
+  arrivals.
+- `events.log`: one line per go-around.
 
-## Web view
-
-`web/` is a dependency-free view of the go-arounds JSON: a list where each
-entry opens to a north-up track figure (approach, go-around point, what
-followed, the runway) with the wind and the outcome. Where nothing was
-received for more than 60 s the line is dashed: the aircraft did not fly
-that straight line.
-
-- Standalone: serve `web/` next to the go-arounds JSON and open
-  `index.html` (`?url=<json>` to point elsewhere, `?tz=Asia/Tokyo` for the
-  time zone; default: the browser's).
-- Embedded: load `goaround.css` and `goaround.js`, then
-
-  ```js
-  const view = GoAroundView.mount(document.getElementById('list'), {
-      url: 'go-arounds.json', timeZone: 'UTC',
-      // flightLink(g) -> {href, label} | null, extraLinks(g, element),
-      // storage: {load(), save(obj)}, pollMs
-  });
-  ```
+In Docker, the JSON is served at `/toganomon/` and the logs are on the
+`toganomon-state` volume.
 
 ## Known limitations
 
@@ -129,6 +173,7 @@ that straight line.
 ```sh
 python3 -m unittest discover -s tests
 node tests/web_test.js
+node tests/console_test.js
 ```
 
 ## License
