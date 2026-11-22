@@ -119,8 +119,15 @@
         const capR = node('div', 'st-cap', 'RECEIVER');
         const lists = { airport: node('dl', 'st-rows'), receiver: node('dl', 'st-rows'), status: node('dl', 'st-rows st-status') };
         container.replaceChildren(capA, tiles, lists.airport, capR, lists.receiver, lists.status);
-        if (o.onGa) ga.t.addEventListener('click', () => o.onGa());
-        else ga.t.disabled = true;
+        // a tile that opens something says so: an arrow and a tooltip
+        if (o.onGa) {
+            ga.lab.textContent = 'G/A ▸';
+            ga.t.title = 'OPEN GO-AROUNDS';
+            ga.t.setAttribute('aria-label', 'open GO-AROUNDS');
+            ga.t.addEventListener('click', () => o.onGa());
+        } else {
+            ga.t.disabled = true;
+        }
 
         let last = null, runway, timer = null;
 
