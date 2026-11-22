@@ -478,12 +478,15 @@ def _climb_confirmed(pts, i):
     return False
 
 
-def detect_movements(doc, alt_offset=0.0):
+def detect_movements(doc, alt_offset=0.0, now=None):
     """readsb trace document -> [(time, kind, runway, callsign, ground speed kt,
     emitter category)]; the last three may be None.
 
     One event per pass: the same kind again within DEDUP_S is the same pass,
-    unless the other kind came in between.
+    unless the other kind came in between. With now (the per-minute run), a
+    departure whose callsign has not been broadcast since the pass is held
+    back until DEP_IDENT_S after it: a steep climb confirms it in seconds,
+    before the new callsign, and a recorded movement is not rewritten.
     """
     t0 = doc.get("timestamp")
     out, last, flight, cat = [], {}, None, None
@@ -502,18 +505,21 @@ def detect_movements(doc, alt_offset=0.0):
         t = t0 + p[0]
         if t - last.get(hit[0], -1e18) < DEDUP_S:
             continue
-        last[hit[0]] = t
-        last.pop(OTHER[hit[0]], None)
         ident_flight, ident_cat = flight, cat
         if hit[0] == "dep":
-            ident_flight, ident_cat = _ident_after(pts, i, flight, cat)
+            ident_flight, ident_cat, fresh = _ident_after(pts, i, flight, cat)
+            if not fresh and now is not None and now - t < DEP_IDENT_S:
+                continue
+        last[hit[0]] = t
+        last.pop(OTHER[hit[0]], None)
         out.append((t, hit[0], hit[1], ident_flight, _gs(p), ident_cat))
     return out
 
 
 def _ident_after(pts, i, flight, cat):
     """Callsign and category for a departure at pts[i]: the first ones
-    broadcast within DEP_IDENT_S from the pass, else what was known before."""
+    broadcast within DEP_IDENT_S from the pass, else what was known before;
+    and whether a callsign was broadcast since the pass."""
     new_flight = new_cat = None
     for p in pts[i:]:
         if p[0] - pts[i][0] > DEP_IDENT_S:
@@ -522,7 +528,7 @@ def _ident_after(pts, i, flight, cat):
         new_cat = new_cat or _category(p)
         if new_flight and new_cat:
             break
-    return new_flight or flight, new_cat or cat
+    return new_flight or flight, new_cat or cat, new_flight is not None
 
 
 def _same_pass(moves, hx, kind, t):
@@ -701,7 +707,7 @@ def update_movements(state, snapshot, alt_offset=0.0):
     for hx in sorted(keep):
         doc = load_trace(trace_path(hx, "recent"))
         if doc:
-            record_movements(state, hx, detect_movements(doc, alt_offset), now)
+            record_movements(state, hx, detect_movements(doc, alt_offset, now), now)
     return record_movements(state, "", [], now)
 
 

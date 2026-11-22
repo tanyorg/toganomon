@@ -191,6 +191,14 @@ class Movements(unittest.TestCase):
         doc = pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500)
         doc["trace"].insert(0, with_ident(gate_point(-600, 8, 0, 3000, H34, 0), "ANA241  ", "A5"))
         self.assertEqual(cs.detect_movements(doc)[0][3::2], ("ANA241", "A5"))
+        # a steep climb is confirmed before the new callsign arrives: the
+        # per-minute run waits up to DEP_IDENT_S for it, then takes what it has
+        doc = pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500, n=3)
+        doc["trace"].insert(0, with_ident(gate_point(-600, 8, 0, 3000, H34, 0), "JNA503  ", "A3"))
+        self.assertEqual(cs.detect_movements(doc, now=T0 + 20), [])
+        self.assertEqual(cs.detect_movements(doc, now=T0 + cs.DEP_IDENT_S)[0][3], "JNA503")
+        doc["trace"].append(with_ident(gate_point(15, -6, 0, 1100, H34, 2500), "JNA504  ", "A3"))
+        self.assertEqual(cs.detect_movements(doc, now=T0 + 20)[0][3], "JNA504")
         # an arrival keeps the callsign it had before the pass
         doc = pass_trace(T0, -5.5, 0.5, 950, 0, H16, -700)
         with_ident(doc["trace"][0], "JAL329  ", "A3")
@@ -259,8 +267,11 @@ class Candidates(unittest.TestCase):
                                                    "alt_baro": "ground"}]}
                 cs.update_movements(st, ground)
                 self.assertEqual(st["candidates"], {"86837c": T0})
+                doc = pass_trace(T0 + 10, 0, -5, 300, 2000, H34, 3500)
+                for q in doc["trace"]:
+                    q[8] = {"flight": "ANA260  "}       # else held back until DEP_IDENT_S
                 with open(os.path.join(d, "7c", "trace_recent_86837c.json"), "w") as f:
-                    json.dump(pass_trace(T0 + 10, 0, -5, 300, 2000, H34, 3500), f)
+                    json.dump(doc, f)
                 high = {"now": T0 + 60, "aircraft": [{"hex": "86837c", "seen": 0, "lat": p[1], "lon": p[2],
                                                       "alt_baro": 7000}]}
                 self.assertEqual(cs.candidates(high), [])
