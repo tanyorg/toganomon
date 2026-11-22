@@ -68,9 +68,26 @@ This starts three containers:
 - **RTL-SDR on this host?** Add the device settings from ultrafeeder's
   README to the `ultrafeeder` service (keep `READSB_EXTRA_ARGS` and the two
   volumes) and drop `ULTRAFEEDER_CONFIG`.
+- **Proxmox LXC?** Docker runs in an unprivileged container with
+  `features: nesting=1,keyctl=1` (tested on Debian 12).
 - **The first 24 hours** count only what was received since the start; the
   LAST 24H window says SINCE when. To bring the go-around list of another
   installation along, see [docker/README.md](docker/README.md).
+
+### Troubleshooting
+
+- `docker compose logs ultrafeeder` on the first start shows
+  `loading state ..... FAILED!` (there is no saved state yet) and may show
+  `curl: (23) ...` from `tar1090-update` before it fetches the aircraft
+  database another way. Both are harmless.
+- The console stays empty: check that ultrafeeder reached your receiver
+  (`docker compose logs ultrafeeder | grep "Connection established"`) and
+  that `BEAST_HOST:BEAST_PORT` is a Beast output (usually 30005).
+- No wind and no METAR in the header: NOAA has no reports for the ICAO,
+  or the host cannot reach `tgftp.nws.noaa.gov`
+  (`docker compose logs toganomon`).
+- Arrivals stay at 0 while aircraft land: the airport's gate may not fit
+  your reception; run the `--check-runways` command below.
 
 ## Airport data
 
