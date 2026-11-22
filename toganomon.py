@@ -102,6 +102,12 @@ SAME_AIRFRAME_S = 2 * 3600
 # 2026-11-20, +320..+832 fpm while descending to land).
 DEP_CONFIRM_S = 30
 DEP_CONFIRM_FT = 200
+# A departure's callsign and category are taken from the first points within
+# DEP_IDENT_S after the gate pass, not before it: a departing aircraft is
+# often first received in the gate itself, its callsign a few seconds later,
+# and one tracked since its arrival may still carry the arriving flight's
+# callsign until the new one is broadcast.
+DEP_IDENT_S = 60
 # An aircraft that was a candidate (near and low) stays one this long, so its
 # trace_recent is still read after it climbed out of the candidate box: a
 # fast departure goes from the runway to above max_alt_ft between two runs.
@@ -498,8 +504,25 @@ def detect_movements(doc, alt_offset=0.0):
             continue
         last[hit[0]] = t
         last.pop(OTHER[hit[0]], None)
-        out.append((t, hit[0], hit[1], flight, _gs(p), cat))
+        ident_flight, ident_cat = flight, cat
+        if hit[0] == "dep":
+            ident_flight, ident_cat = _ident_after(pts, i, flight, cat)
+        out.append((t, hit[0], hit[1], ident_flight, _gs(p), ident_cat))
     return out
+
+
+def _ident_after(pts, i, flight, cat):
+    """Callsign and category for a departure at pts[i]: the first ones
+    broadcast within DEP_IDENT_S from the pass, else what was known before."""
+    new_flight = new_cat = None
+    for p in pts[i:]:
+        if p[0] - pts[i][0] > DEP_IDENT_S:
+            break
+        new_flight = new_flight or _flight(p)
+        new_cat = new_cat or _category(p)
+        if new_flight and new_cat:
+            break
+    return new_flight or flight, new_cat or cat
 
 
 def _same_pass(moves, hx, kind, t):

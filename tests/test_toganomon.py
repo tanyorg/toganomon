@@ -172,6 +172,32 @@ class Movements(unittest.TestCase):
         self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("dep", "16")])
         self.assertEqual(cs.detect_movements(doc)[0][0], T0)
 
+    def test_departure_callsign_from_just_after_the_pass(self):
+        def with_ident(p, flight, cat):
+            p[8] = {"flight": flight, "category": cat}
+            return p
+        # first received in the gate; callsign and category arrive 10 s later
+        doc = pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500)
+        for p in doc["trace"][2:]:
+            with_ident(p, "ANA246  ", "A5")
+        self.assertEqual(cs.detect_movements(doc)[0][3::2], ("ANA246", "A5"))
+        # tracked since its arrival: the old callsign gives way to the new one
+        doc = pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500)
+        doc["trace"].insert(0, with_ident(gate_point(-600, 8, 0, 3000, H34, 0), "ANA241  ", "A5"))
+        for p in doc["trace"][4:]:
+            with_ident(p, "ANA246  ", None)
+        self.assertEqual(cs.detect_movements(doc)[0][3::2], ("ANA246", "A5"))
+        # nothing new within DEP_IDENT_S: keep what was known
+        doc = pass_trace(T0, 0.5, -5.5, 0, 950, H34, 2500)
+        doc["trace"].insert(0, with_ident(gate_point(-600, 8, 0, 3000, H34, 0), "ANA241  ", "A5"))
+        self.assertEqual(cs.detect_movements(doc)[0][3::2], ("ANA241", "A5"))
+        # an arrival keeps the callsign it had before the pass
+        doc = pass_trace(T0, -5.5, 0.5, 950, 0, H16, -700)
+        with_ident(doc["trace"][0], "JAL329  ", "A3")
+        for p in doc["trace"][1:]:
+            with_ident(p, "JAL330  ", "A3")
+        self.assertEqual(cs.detect_movements(doc)[0][3], "JAL329")
+
     def test_record_dedup_prune_and_summary(self):
         st = cs.load_state("/nonexistent", T0)
         cs.record_movements(st, "aaaaaa", [(T0, "arr", "16")], T0)
