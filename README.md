@@ -171,6 +171,12 @@ cd toganomon && git pull
 cd docker && docker compose up -d --build
 ```
 
+That follows `main`. To stay on a release instead, check out its tag
+(`git checkout v0.1.0`, then the same `docker compose up -d --build`); the
+[releases](https://github.com/tanyorg/toganomon/releases) say what changed.
+Until 1.0, a new minor version (0.2.0) may change the detection or the JSON
+output; a patch (0.1.1) only fixes bugs.
+
 The go-around history and the state are on the `toganomon-state` volume and
 survive updates. The images are pinned to the versions this was tested
 with: ultrafeeder `latest-build-993` and nginx `1.27.5-alpine` (the worker
