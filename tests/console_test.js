@@ -225,8 +225,17 @@ t('Movements.withDays: a line before each day, in the zone', () => {
 });
 
 t('Movements.showingText: which flight the map shows', () => {
-    assert.strictEqual(M.showingText(MV.movements[0], 'Asia/Tokyo'), 'MAP: HVN356 ARR 16:04');
-    assert.strictEqual(M.showingText(MV.movements[1], 'UTC'), 'MAP: 8681B7 DEP 07:03');
+    assert.strictEqual(M.showingText(MV.movements[0], 'Asia/Tokyo', false), 'MAP: HVN356 ARR 16:04 · TRACE');
+    assert.strictEqual(M.showingText(MV.movements[1], 'UTC', true), 'MAP: 8681B7 DEP 07:03 · LIVE');
+});
+
+t('Movements.mapView: live while the window runs, else the history', () => {
+    const dep = MV.movements[1];                       // window ends 15 min after the departure
+    assert.deepStrictEqual(M.mapView(dep, dep.t + 60), { live: true, params: { icao: '8681b7' } });
+    assert.deepStrictEqual(M.mapView(dep, dep.t + 15 * 60), { live: false, params: M.traceParams(dep) });
+    const arr = MV.movements[0];                       // 3 min after the arrival
+    assert.strictEqual(M.mapView(arr, arr.t + 120).live, true);
+    assert.strictEqual(M.mapView(arr, arr.t + 180).live, false);
 });
 
 t('Movements.sameMovement and Console.traceUrl', () => {

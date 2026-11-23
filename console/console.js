@@ -25,9 +25,9 @@
         return '/tar1090/?' + p.toString();
     }
 
-    // tar1090 showing one flight's trace (Movements.traceParams), on the
-    // live map's view of the airport (without a zoom tar1090 opens a trace
-    // at zoom 5, a whole region)
+    // tar1090 showing one flight (Movements.mapView params), on the live
+    // map's view of the airport (without a zoom tar1090 opens a trace at
+    // zoom 5, a whole region; with lat/lon it does not follow the aircraft)
     function traceUrl(params, airport, zoom) {
         const p = new URLSearchParams(params);
         p.set('zoom', String(zoom || MAP_ZOOM));
@@ -138,8 +138,8 @@
     });
     Movements.mount($('mvBody'), {
         url: DATA + 'movements.json', timeZone, pollMs: SUMMARY_MS,
-        onSelect: m => {
-            if (m) $('map').src = traceUrl(Movements.traceParams(m), airport);
+        onSelect: (m, v) => {
+            if (m) $('map').src = traceUrl(v.params, airport);
             else if (airport) $('map').src = mapUrl(airport);
         },
         onGa: id => {

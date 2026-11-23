@@ -5,15 +5,20 @@
 //   const mv = Movements.mount(element, {
 //       url: '/toganomon/movements.json',   // polled every pollMs (60000; 0 = no polling)
 //       timeZone: 'Asia/Tokyo',             // times in the list (default UTC)
-//       onSelect(m) {},     // a row was clicked (m: one movement); null to go back to the live map
+//       onSelect(m, view) {},   // a row was clicked: view = Movements.mapView(m, now);
+//                               // (null, null) to go back to the live map
 //       onGa(id) {},        // the G/A mark of a row was clicked (go-around id)
 //   });
 //   -> { refresh(), stop() }
 //
-// A row's flight on the tar1090 map: Movements.traceParams(m) gives the
-// query (icao, showTrace, startTime, endTime) for tar1090's history view
-// of that aircraft around the movement. While one is shown, a line above
-// the list says so, with a button back to the live map.
+// A row's flight on the tar1090 map: Movements.mapView(m, now) gives the
+// tar1090 query. Once the part of the flight to show has passed, that is
+// tar1090's history view (Movements.traceParams: icao, showTrace,
+// startTime, endTime), which is loaded once and not updated. While it is
+// still going on (a departure climbing out), it is the aircraft selected
+// on the live map (icao only), whose track keeps growing. While a flight
+// is shown, a line above the list says so, with a button back to the live
+// map.
 // The list has a line for each day (in timeZone).
 // Everything but mount() is DOM-free (tests/console_test.js).
 (function (root) {
@@ -57,10 +62,11 @@
         return out;
     }
 
-    // The line above the list while a flight is on the map.
-    function showingText(m, timeZone) {
+    // The line above the list while a flight is on the map (LIVE: updating;
+    // TRACE: the history, as loaded).
+    function showingText(m, timeZone, live) {
         const c = cells(m, timeZone);
-        return `MAP: ${c.flight} ${m.kind === 'arr' ? 'ARR' : 'DEP'} ${c.time}`;
+        return `MAP: ${c.flight} ${m.kind === 'arr' ? 'ARR' : 'DEP'} ${c.time} · ${live ? 'LIVE' : 'TRACE'}`;
     }
 
     // Movements to list for a filter, and the count for each filter.
@@ -110,6 +116,14 @@
         };
     }
 
+    // {live, params}: live (icao only) while the movement's window is not
+    // over yet at now (seconds), else the history view of the window.
+    function mapView(m, now) {
+        const trace = traceParams(m);
+        const after = m.kind === 'arr' ? TRACE_AFTER_ARR_S : TRACE_AFTER_DEP_S;
+        return now < m.t + after ? { live: true, params: { icao: trace.icao } } : { live: false, params: trace };
+    }
+
     // Same movement (to keep the selected row across polls).
     function sameMovement(a, b) {
         return !!a && !!b && a.t === b.t && a.kind === b.kind && a.hex === b.hex;
@@ -119,7 +133,7 @@
         const o = Object.assign({
             url: 'movements.json', pollMs: 60000, timeZone: 'UTC', onSelect: null, onGa: null,
         }, options || {});
-        let doc = null, filter = 'ALL', selected = null, timer = null;
+        let doc = null, filter = 'ALL', selected = null, selectedView = null, timer = null;
         el.classList.add('mv-view');
         el.textContent = '';
         const bar = document.createElement('div');
@@ -148,7 +162,8 @@
 
         function select(m) {
             selected = m;
-            if (o.onSelect) o.onSelect(m);
+            selectedView = m ? mapView(m, Date.now() / 1000) : null;
+            if (o.onSelect) o.onSelect(m, selectedView);
             render();
         }
 
@@ -188,7 +203,7 @@
                 tabs[f].classList.toggle('active', f === filter);
             }
             showing.hidden = !selected;
-            if (selected) showingText_.textContent = showingText(selected, o.timeZone);
+            if (selected) showingText_.textContent = showingText(selected, o.timeZone, selectedView.live);
             const scroll = list.scrollTop;      // kept across polls
             list.textContent = '';
             if (!doc) {
@@ -237,7 +252,7 @@
         return { refresh, stop };
     }
 
-    const Movements = { mount, view, cells, traceParams, sameMovement, hhmm, dayText, withDays, showingText };
+    const Movements = { mount, view, cells, traceParams, mapView, sameMovement, hhmm, dayText, withDays, showingText };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Movements;
         return;
