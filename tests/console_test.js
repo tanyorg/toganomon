@@ -35,6 +35,17 @@ t('parseWind: direction, speed, gust, unit, variable sector', () => {
     assert.strictEqual(W.parseWind('ZZZZ 200524Z VRB03KT 9999').dir, null);
 });
 
+t('parseWindToken: one wind group, as reported', () => {
+    assert.deepStrictEqual(W.parseWindToken('36011KT'),
+        { dir: 360, spd: 11, gust: null, unit: 'kt', vrb: false, calm: false, varFrom: null, varTo: null });
+    assert.deepStrictEqual(W.parseWindToken('270105G130KT'),
+        { dir: 270, spd: 105, gust: 130, unit: 'kt', vrb: false, calm: false, varFrom: null, varTo: null });
+    assert.strictEqual(W.parseWindToken('21005MPS').unit, 'm/s');
+    assert.strictEqual(W.parseWindToken('VRB00KT').calm, true);
+    assert.strictEqual(W.dirText(W.parseWindToken('36011KT')), '360°');
+    for (const junk of ['260V330', 'RJFF', '9999', '2901KT', '', null]) assert.strictEqual(W.parseWindToken(junk), null);
+});
+
 t('parseWind: nothing after RMK or a trend, nothing from junk', () => {
     assert.strictEqual(W.parseWind('ZZZZ 200524Z 9999 RMK 09012KT'), null);
     assert.strictEqual(W.parseWind('ZZZZ 200524Z 9999 BECMG 27006KT'), null);
