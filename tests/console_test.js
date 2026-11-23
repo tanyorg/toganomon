@@ -233,8 +233,10 @@ t('Movements.sameMovement and Console.traceUrl', () => {
     assert.strictEqual(M.sameMovement(MV.movements[1], { ...MV.movements[1] }), true);
     assert.strictEqual(M.sameMovement(MV.movements[1], MV.movements[2]), false);
     assert.strictEqual(M.sameMovement(null, MV.movements[2]), false);
-    assert.strictEqual(C.traceUrl(M.traceParams(MV.movements[0])),
-        '/tar1090/?icao=888165&showTrace=2026-11-24&startTime=06%3A49%3A29&endTime=07%3A07%3A29');
+    assert.strictEqual(C.traceUrl(M.traceParams(MV.movements[0]), AP),
+        '/tar1090/?icao=888165&showTrace=2026-11-24&startTime=06%3A49%3A29&endTime=07%3A07%3A29'
+        + '&zoom=10&lat=10.5000&lon=20.2500');
+    assert.strictEqual(C.traceUrl({ icao: 'abc' }, null, 11), '/tar1090/?icao=abc&zoom=11');
 });
 
 if (failed) {
