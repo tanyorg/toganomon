@@ -195,11 +195,11 @@ t('Movements.view: rows for a filter and the counts', () => {
     assert.deepStrictEqual(M.view(null, 'ARR'), { rows: [], counts: { ALL: 0, ARR: 0, DEP: 0 } });
 });
 
-t('Movements.cells: local time, direction, hex without a callsign', () => {
+t('Movements.cells: local time, ARR/DEP, hex without a callsign', () => {
     assert.deepStrictEqual(M.cells(MV.movements[0], 'Asia/Tokyo'),
-        { time: '16:04', dir: '↓', rwy: '16', flight: 'HVN356', type: 'A321', reg: 'VN-A632' });
+        { time: '16:04', dir: 'ARR', rwy: '16', flight: 'HVN356', type: 'A321', reg: 'VN-A632' });
     assert.deepStrictEqual(M.cells(MV.movements[1], 'UTC'),
-        { time: '07:03', dir: '↑', rwy: '16', flight: '8681B7', type: '', reg: '' });
+        { time: '07:03', dir: 'DEP', rwy: '16', flight: '8681B7', type: '', reg: '' });
 });
 
 t('Movements.traceParams: the approach or the climb, inside the UTC day', () => {

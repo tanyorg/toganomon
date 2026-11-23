@@ -40,11 +40,12 @@
 .mv-list { flex: 1; min-height: 0; overflow-y: auto; }
 .mv-row {
     display: grid;
-    grid-template-columns: 3.2em 1em 2.2em minmax(4.5em, 1fr) 3.2em 6em 2.6em;
+    grid-template-columns: 3.2em 3.1em 2.2em minmax(4.5em, 1fr) 3.2em 6em 2.6em;
     gap: 4px;
     align-items: center;
     padding: 2px 2px;
     border-bottom: 1px solid #21262d;
+    border-left: 3px solid transparent;     /* arrival / departure colour */
     white-space: nowrap;
     cursor: pointer;
 }
@@ -52,8 +53,20 @@
 .mv-row.selected { background: #1f2937; outline: 1px solid #388bfd; }
 .mv-row > span { overflow: hidden; text-overflow: ellipsis; }
 .mv-time { color: #8b949e; font-variant-numeric: tabular-nums; }
-.mv-arr .mv-dir { color: #58a6ff; }
-.mv-dep .mv-dir { color: #3fb950; }
+/* ARR / DEP: a colour bar on the left of the row and a badge */
+.mv-arr { border-left-color: #58a6ff; }
+.mv-dep { border-left-color: #3fb950; }
+.mv-row > .mv-dir {
+    justify-self: start;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.62rem;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    color: #0d1117;
+}
+.mv-arr .mv-dir { background: #58a6ff; }
+.mv-dep .mv-dir { background: #3fb950; }
 .mv-flight { color: #c9d1d9; font-weight: bold; }
 .mv-type, .mv-reg { color: #8b949e; }
 .mv-ga button { color: #d29922; border-color: #d29922; padding: 0 3px; }

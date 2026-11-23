@@ -82,12 +82,12 @@
         return { rows: kind ? all.filter(m => m.kind === kind) : all, counts };
     }
 
-    // The cells of one row: time, ↓/↑ and runway, callsign (hex without one),
-    // type, registration.
+    // The cells of one row: time, ARR/DEP and runway, callsign (hex without
+    // one), type, registration.
     function cells(m, timeZone) {
         return {
             time: hhmm(m.t, timeZone),
-            dir: m.kind === 'arr' ? '↓' : '↑',
+            dir: m.kind === 'arr' ? 'ARR' : 'DEP',
             rwy: m.rwy || '--',
             flight: m.flight || (m.hex ? m.hex.toUpperCase() : '--'),
             type: m.type || '',
