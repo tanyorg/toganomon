@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests for the DOM-free parts of console/wind.js, console/stats.js,
-// console/clock.js, console/float.js and console/console.js. Run: node tests/console_test.js
+// console/clock.js, console/float.js, console/movements.js and console/console.js. Run: node tests/console_test.js
 'use strict';
 const assert = require('assert');
 const path = require('path');
@@ -9,6 +9,7 @@ const F = require(path.join(__dirname, '..', 'console', 'float.js'));
 const C = require(path.join(__dirname, '..', 'console', 'console.js'));
 const S = require(path.join(__dirname, '..', 'console', 'stats.js'));
 const K = require(path.join(__dirname, '..', 'console', 'clock.js'));
+const M = require(path.join(__dirname, '..', 'console', 'movements.js'));
 
 let failed = 0;
 function t(label, fn) {
@@ -175,6 +176,76 @@ t('Clock.zoneLabel: abbreviation where one exists, else an offset', () => {
     assert.strictEqual(K.zoneLabel('Asia/Tokyo'), 'JST');
     assert.strictEqual(K.zoneLabel('UTC'), 'UTC');
     assert.match(K.zoneLabel('Asia/Seoul'), /^(KST|UTC\+9)$/);
+});
+
+// 2026-11-24 07:04:29 UTC = 16:04:29 JST
+const T = Date.UTC(2026, 10, 24, 7, 4, 29) / 1000;
+const MV = { now: T + 600, window_s: 86400, movements: [
+    { t: T, kind: 'arr', rwy: '16', hex: '888165', flight: 'HVN356', gs: 155, category: 'A3', reg: 'VN-A632', type: 'A321', ga: null },
+    { t: T - 60, kind: 'dep', rwy: '16', hex: '8681b7', flight: null, gs: 150, category: 'A3', reg: null, type: null, ga: 'x-1' },
+    { t: T - 120, kind: 'arr', rwy: '16', hex: '8681b7', flight: 'ANA240', gs: 140, category: 'A3', reg: 'JA73NR', type: 'B738', ga: 'x-1' },
+    { t: 'bad', kind: 'arr' }, null,
+] };
+
+t('Movements.view: rows for a filter and the counts', () => {
+    const all = M.view(MV, 'ALL');
+    assert.deepStrictEqual(all.counts, { ALL: 3, ARR: 2, DEP: 1 });
+    assert.deepStrictEqual(all.rows.map(m => m.t), [T, T - 60, T - 120]);
+    assert.deepStrictEqual(M.view(MV, 'DEP').rows.map(m => m.kind), ['dep']);
+    assert.deepStrictEqual(M.view(null, 'ARR'), { rows: [], counts: { ALL: 0, ARR: 0, DEP: 0 } });
+});
+
+t('Movements.cells: local time, direction, hex without a callsign', () => {
+    assert.deepStrictEqual(M.cells(MV.movements[0], 'Asia/Tokyo'),
+        { time: '16:04', dir: '↓', rwy: '16', flight: 'HVN356', type: 'A321', reg: 'VN-A632' });
+    assert.deepStrictEqual(M.cells(MV.movements[1], 'UTC'),
+        { time: '07:03', dir: '↑', rwy: '16', flight: '8681B7', type: '', reg: '' });
+});
+
+t('Movements.traceParams: the approach or the climb, inside the UTC day', () => {
+    assert.deepStrictEqual(M.traceParams(MV.movements[0]),
+        { icao: '888165', showTrace: '2026-11-24', startTime: '06:49:29', endTime: '07:07:29' });
+    assert.deepStrictEqual(M.traceParams(MV.movements[1]),
+        { icao: '8681b7', showTrace: '2026-11-24', startTime: '07:00:29', endTime: '07:18:29' });
+    const early = { t: Date.UTC(2026, 10, 24, 0, 5, 0) / 1000, kind: 'arr', hex: 'ABC123' };
+    assert.deepStrictEqual(M.traceParams(early),
+        { icao: 'abc123', showTrace: '2026-11-24', startTime: '00:00:00', endTime: '00:08:00' });
+    const late = { t: Date.UTC(2026, 10, 24, 23, 55, 0) / 1000, kind: 'dep', hex: 'abc123' };
+    assert.strictEqual(M.traceParams(late).endTime, '23:59:59');
+});
+
+t('Movements.withDays: a line before each day, in the zone', () => {
+    const late = { t: Date.UTC(2026, 10, 23, 15, 30, 0) / 1000, kind: 'dep', hex: 'a' };   // 00:30 JST on the 24th
+    const rows = [MV.movements[0], late, { t: Date.UTC(2026, 10, 23, 14, 30, 0) / 1000, kind: 'arr', hex: 'b' }];
+    assert.deepStrictEqual(M.withDays(rows, 'Asia/Tokyo').map(x => x.day || x.m.hex),
+        ['2026-11-24 TUE', '888165', 'a', '2026-11-23 MON', 'b']);
+    assert.deepStrictEqual(M.withDays(rows, 'UTC').map(x => x.day || x.m.hex),
+        ['2026-11-24 TUE', '888165', '2026-11-23 MON', 'a', 'b']);
+    assert.deepStrictEqual(M.withDays([], 'UTC'), []);
+});
+
+t('Movements.showingText: which flight the map shows', () => {
+    assert.strictEqual(M.showingText(MV.movements[0], 'Asia/Tokyo', false), 'MAP: HVN356 ARR 16:04 · TRACE');
+    assert.strictEqual(M.showingText(MV.movements[1], 'UTC', true), 'MAP: 8681B7 DEP 07:03 · LIVE');
+});
+
+t('Movements.mapView: live while the window runs, else the history', () => {
+    const dep = MV.movements[1];                       // window ends 15 min after the departure
+    assert.deepStrictEqual(M.mapView(dep, dep.t + 60), { live: true, params: { icao: '8681b7' } });
+    assert.deepStrictEqual(M.mapView(dep, dep.t + 15 * 60), { live: false, params: M.traceParams(dep) });
+    const arr = MV.movements[0];                       // 3 min after the arrival
+    assert.strictEqual(M.mapView(arr, arr.t + 120).live, true);
+    assert.strictEqual(M.mapView(arr, arr.t + 180).live, false);
+});
+
+t('Movements.sameMovement and Console.traceUrl', () => {
+    assert.strictEqual(M.sameMovement(MV.movements[1], { ...MV.movements[1] }), true);
+    assert.strictEqual(M.sameMovement(MV.movements[1], MV.movements[2]), false);
+    assert.strictEqual(M.sameMovement(null, MV.movements[2]), false);
+    assert.strictEqual(C.traceUrl(M.traceParams(MV.movements[0]), AP),
+        '/tar1090/?icao=888165&showTrace=2026-11-24&startTime=06%3A49%3A29&endTime=07%3A07%3A29'
+        + '&zoom=10&lat=10.5000&lon=20.2500');
+    assert.strictEqual(C.traceUrl({ icao: 'abc' }, null, 11), '/tar1090/?icao=abc&zoom=11');
 });
 
 if (failed) {

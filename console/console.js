@@ -1,7 +1,9 @@
 // toganomon console: header (METAR / TAF / clocks), tar1090 map centred on
-// the airport, LAST 24H (Stats), WIND (Wind) and GO-AROUNDS (GoAroundView).
+// the airport, LAST 24H (Stats), WIND (Wind), GO-AROUNDS (GoAroundView) and
+// MOVEMENTS (Movements: a row shows that flight's trace on the map).
 // Data, all from the same origin (docker/nginx.conf):
-//   /toganomon/summary.json, /toganomon/go-arounds.json  (toganomon.py)
+//   /toganomon/summary.json, /toganomon/go-arounds.json,
+//   /toganomon/movements.json                             (toganomon.py)
 //   /toganomon/metar.txt, /toganomon/taf.txt              (fetch_wx.py)
 //   /tar1090/                                             (ultrafeeder)
 // Query: ?tz=<IANA zone> for the second clock and the list (default: browser).
@@ -23,7 +25,20 @@
         return '/tar1090/?' + p.toString();
     }
 
-    const Console = { mapUrl };
+    // tar1090 showing one flight (Movements.mapView params), on the live
+    // map's view of the airport (without a zoom tar1090 opens a trace at
+    // zoom 5, a whole region; with lat/lon it does not follow the aircraft)
+    function traceUrl(params, airport, zoom) {
+        const p = new URLSearchParams(params);
+        p.set('zoom', String(zoom || MAP_ZOOM));
+        if (airport && Array.isArray(airport.arp)) {
+            p.set('lat', airport.arp[0].toFixed(4));
+            p.set('lon', airport.arp[1].toFixed(4));
+        }
+        return '/tar1090/?' + p.toString();
+    }
+
+    const Console = { mapUrl, traceUrl };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Console;
         return;
@@ -52,11 +67,12 @@
     const wind = Wind.mount($('windBody'));
     let stats = { setAirport() {} };     // Stats.mount below
 
-    let mapSet = false;
+    let mapSet = false, airport = null;
     async function loadAirport() {
         try {
             const d = await getJson(DATA + 'go-arounds.json');
             const a = d && d.airport;
+            if (a) airport = a;
             if (a) wind.update({ airport: a });
             if (a && a.icao) stats.setAirport(a.icao);
             if (a && a.icao) {
@@ -109,6 +125,27 @@
         at: el => ({ left: window.innerWidth - el.offsetWidth - Float.MARGIN, top: top() }),
         onOpen: () => view.fit(),
         onResize: () => view.fit(),
+    });
+    // MOVEMENTS: left of GO-AROUNDS when that is open, else at the right edge
+    const gaFloat = $('gaFloat');
+    Float.make($('mvFloat'), {
+        key: 'mv', button: $('mvBtn'), resizable: true,
+        at: el => ({
+            left: window.innerWidth - el.offsetWidth - Float.MARGIN
+                - (gaFloat.hidden ? 0 : gaFloat.offsetWidth + Float.MARGIN),
+            top: top(),
+        }),
+    });
+    Movements.mount($('mvBody'), {
+        url: DATA + 'movements.json', timeZone, pollMs: SUMMARY_MS,
+        onSelect: (m, v) => {
+            if (m) $('map').src = traceUrl(v.params, airport);
+            else if (airport) $('map').src = mapUrl(airport);
+        },
+        onGa: id => {
+            ga.open();
+            view.show(id);
+        },
     });
     stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,

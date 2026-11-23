@@ -1,0 +1,60 @@
+/* toganomon MOVEMENTS window (movements.js): filter tabs, then a scrolling list. */
+.mv-view { display: flex; flex-direction: column; min-height: 0; font-size: 0.72rem; }
+.mv-bar { display: flex; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid #30363d; }
+.mv-tab, .mv-back, .mv-ga button {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 3px;
+    color: #8b949e;
+    font: inherit;
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    cursor: pointer;
+}
+.mv-tab.active { color: #c9d1d9; border-color: #8b949e; }
+/* while one flight's track is on the map */
+.mv-showing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: #1f2937;
+    border: 1px solid #388bfd;
+    border-radius: 3px;
+    color: #c9d1d9;
+}
+.mv-showing[hidden] { display: none; }
+.mv-showing span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-back { color: #3fb950; border-color: #238636; }
+.mv-day {
+    position: sticky;
+    top: 0;
+    padding: 4px 2px 2px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    color: #f0b72f;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+}
+.mv-list { flex: 1; min-height: 0; overflow-y: auto; }
+.mv-row {
+    display: grid;
+    grid-template-columns: 3.2em 1em 2.2em minmax(4.5em, 1fr) 3.2em 6em 2.6em;
+    gap: 4px;
+    align-items: center;
+    padding: 2px 2px;
+    border-bottom: 1px solid #21262d;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.mv-row:hover { background: #161b22; }
+.mv-row.selected { background: #1f2937; outline: 1px solid #388bfd; }
+.mv-row > span { overflow: hidden; text-overflow: ellipsis; }
+.mv-time { color: #8b949e; font-variant-numeric: tabular-nums; }
+.mv-arr .mv-dir { color: #58a6ff; }
+.mv-dep .mv-dir { color: #3fb950; }
+.mv-flight { color: #c9d1d9; font-weight: bold; }
+.mv-type, .mv-reg { color: #8b949e; }
+.mv-ga button { color: #d29922; border-color: #d29922; padding: 0 3px; }
+.mv-empty { color: #8b949e; padding: 8px 2px; }

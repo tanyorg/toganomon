@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="float.css">
     <link rel="stylesheet" href="stats.css">
     <link rel="stylesheet" href="wind.css">
+    <link rel="stylesheet" href="movements.css">
     <link rel="stylesheet" href="console.css">
 </head>
 <body>
@@ -28,6 +29,7 @@
             <button class="win-btn" id="windBtn" title="WIND" aria-label="WIND">🧭</button>
             <button class="win-btn" id="statsBtn" title="LAST 24H" aria-label="LAST 24H">📊</button>
             <button class="win-btn" id="gaBtn" title="GO-AROUNDS" aria-label="GO-AROUNDS">🛫</button>
+            <button class="win-btn" id="mvBtn" title="MOVEMENTS" aria-label="MOVEMENTS">📋</button>
         </nav>
     </header>
     <main>
@@ -49,11 +51,17 @@
         <div class="float-body" id="gaList"></div>
     </section>
 
+    <section class="float float-fill mv-float" id="mvFloat" aria-label="MOVEMENTS" hidden>
+        <div class="float-bar"><span>MOVEMENTS</span><button class="float-close" aria-label="close">×</button></div>
+        <div class="float-body" id="mvBody"></div>
+    </section>
+
     <script src="/web/goaround.js"></script>
     <script src="clock.js"></script>
     <script src="float.js"></script>
     <script src="wind.js"></script>
     <script src="stats.js"></script>
+    <script src="movements.js"></script>
     <script src="console.js"></script>
 </body>
 </html>

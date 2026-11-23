@@ -653,6 +653,55 @@ class AircraftDb(unittest.TestCase):
         self.assertEqual(cs.parse_config(doc)["paths"]["aircraft_db"], "/usr/local/share/tar1090/git-db/db")
 
 
+class MovementsOut(unittest.TestCase):
+    def state(self):
+        return {"movements": [
+            [T0, "arr", "16", "8681b7", "ANA240", 140, "A3"],
+            [T0 + 120, "dep", "16", "8681b7", "ANA240", 150, "A3"],     # its go-around
+            [T0 + 600, "arr", "16", "abcdef", None],                    # older 5-field entry
+            [T0 + 900, "dep", "34", "87cde5", "CJ01", 160, "A5"],
+        ]}
+
+    def test_newest_first_with_airframe_and_go_around(self):
+        with tempfile.TemporaryDirectory() as d:
+            AircraftDb().db(d)
+            st = self.state()
+            cs.update_airframes(st, d)
+            self.assertEqual(st["airframes"], {"8681b7": ["JA73NR", "B738"], "87cde5": ["58-1219", "KC2"]})
+            hist = [{"id": "8681b7-1800000120", "hex": "8681b7", "t": T0 + 120, "arr_t": T0}]
+            doc = cs.public_movements(st, hist, T0 + 1000)
+        self.assertEqual(doc["window_s"], cs.WINDOW_S)
+        m = doc["movements"]
+        self.assertEqual([x["t"] for x in m], [T0 + 900, T0 + 600, T0 + 120, T0])
+        self.assertEqual(m[0], {"t": T0 + 900, "kind": "dep", "rwy": "34", "hex": "87cde5", "flight": "CJ01",
+                                "gs": 160, "category": "A5", "reg": "58-1219", "type": "KC2", "ga": None})
+        self.assertEqual((m[1]["flight"], m[1]["reg"], m[1]["ga"]), (None, None, None))
+        self.assertEqual([x["ga"] for x in m[2:]], ["8681b7-1800000120"] * 2)
+
+    def test_airframes_follow_the_movements(self):
+        with tempfile.TemporaryDirectory() as d:
+            st = self.state()
+            cs.update_airframes(st, d)                    # empty directory: nothing yet, retried
+            self.assertEqual(st["airframes"], {})
+            AircraftDb().db(d)
+            cs.update_airframes(st, d)
+            st["airframes"]["8681b7"] = ["kept", "B738"]
+            st["movements"] = st["movements"][:2]         # the others left the window
+            cs.update_airframes(st, d)
+        self.assertEqual(st["airframes"], {"8681b7": ["kept", "B738"]})
+
+    def test_window_and_no_history(self):
+        doc = cs.public_movements(self.state(), None, T0 + cs.WINDOW_S + 300)
+        self.assertEqual([x["t"] for x in doc["movements"]], [T0 + 900, T0 + 600])
+        self.assertEqual(cs.public_movements({}, [], T0)["movements"], [])
+
+    def test_config_key(self):
+        with open(RJFF_TOML, "rb") as f:
+            doc = tomllib.load(f)
+        self.assertIsNone(cs.parse_config(doc)["paths"]["movements"])
+        doc.setdefault("paths", {})["movements"] = "/srv/toganomon/movements.json"
+        self.assertEqual(cs.parse_config(doc)["paths"]["movements"], "/srv/toganomon/movements.json")
+
 def metar_at(t, rest):
     """METAR text observed at epoch t."""
     return time.strftime("RJFF %d%H%MZ ", time.gmtime(t)) + rest

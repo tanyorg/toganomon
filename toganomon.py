@@ -41,7 +41,10 @@ hex). Each new movement (arrival or departure) can likewise be appended to
 the optional movements log, the long-term record of how many aircraft used
 which runway (the state keeps only the last 24 hours). With aircraft_db (a
 tar1090-db directory) each go-around also gets the registration and type,
-looked up once.
+looked up once. The optional movements JSON lists the last 24 hours of
+movements, newest first, for the console's MOVEMENTS window (with the
+registration and type when aircraft_db is set, and the go-around each
+belongs to).
 
 Every go-around is also kept forever in the history file and published as
 the go-arounds JSON for the web view, with the METAR wind at detection time
@@ -159,6 +162,7 @@ DEFAULTS = {
         "metar": None,
         "log": None,
         "movements_log": None,
+        "movements": None,
         "aircraft_db": None,
         "airports": None,
     },
@@ -309,7 +313,7 @@ def configure(cfg):
     global ICAO, ARP_LAT, ARP_LON, ELEVATION_FT, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
     global RATE_FPM, GA_WINDOW_S, GA_MIN_GS_KT, GA_EXCLUDE_CATEGORIES, CANDIDATE_KM, CANDIDATE_ALT_FT
     global AIRCRAFT_JSON, TRACES_DIR, STATE_PATH, GA_HISTORY, OUT_PATH, GA_OUT, METAR_PATH, GA_LOG
-    global MOVES_LOG, AIRCRAFT_DB
+    global MOVES_LOG, MOVES_OUT, AIRCRAFT_DB
     ICAO = cfg["airport"]["icao"]
     ARP_LAT, ARP_LON = cfg["airport"]["arp"]
     ELEVATION_FT = cfg["airport"]["elevation_ft"]
@@ -327,7 +331,7 @@ def configure(cfg):
     AIRCRAFT_JSON, TRACES_DIR, STATE_PATH = p["aircraft"], p["traces"], p["state"]
     GA_HISTORY, OUT_PATH, GA_OUT = p["history"], p["summary"], p["go_arounds"]
     METAR_PATH, GA_LOG, MOVES_LOG = p["metar"], p["log"], p["movements_log"]
-    AIRCRAFT_DB = p["aircraft_db"]
+    AIRCRAFT_DB, MOVES_OUT = p["aircraft_db"], p["movements"]
 
 
 def write_atomic(path, text, mode=0o644):
@@ -1058,6 +1062,46 @@ def public_history(history, now):
             "go_arounds": [dict({k: h.get(k) for k in keep}, nth=nth[h.get("id")]) for h in reversed(history)]}
 
 
+def update_airframes(state, db_dir):
+    """Registration and type of every aircraft in the movements, kept in the
+    state as hex -> [reg, type] so each is looked up once; dropped with the
+    aircraft's last movement. Unchanged while the database cannot be read."""
+    known = state.get("airframes")
+    if not isinstance(known, dict):
+        known = state["airframes"] = {}
+    hexes = {m[3] for m in state.get("movements", []) if len(m) > 3 and m[3]}
+    cache = {}
+    for hx in sorted(hexes - known.keys()):
+        info = aircraft_info(hx, db_dir, cache)
+        if info is not None:            # else retried on the next run
+            known[hx] = [info["reg"], info["type"]]
+    for hx in [h for h in known if h not in hexes]:
+        del known[hx]
+
+
+def public_movements(state, history, now):
+    """Movements JSON for the console: the last WINDOW_S, newest first, each
+    with the registration and type (null when unknown) and "ga", the id of
+    the go-around it belongs to (its arrival or its climb), or null."""
+    ga = {}
+    for h in history or []:
+        ga[(h.get("hex"), "dep", h.get("t"))] = h.get("id")
+        if h.get("arr_t") is not None:
+            ga[(h.get("hex"), "arr", h.get("arr_t"))] = h.get("id")
+    frames = state.get("airframes") or {}
+    cutoff = now - WINDOW_S
+    out = []
+    for m in reversed(state.get("movements", [])):
+        if m[0] < cutoff:
+            continue
+        t, kind, rwy, hx = m[:4]
+        flight, gs, cat = (list(m[4:7]) + [None] * 3)[:3]
+        reg, typ = (frames.get(hx) or [None, None])[:2]
+        out.append({"t": t, "kind": kind, "rwy": rwy, "hex": hx, "flight": flight, "gs": gs,
+                    "category": cat, "reg": reg, "type": typ, "ga": ga.get((hx, kind, t))})
+    return {"now": now, "window_s": WINDOW_S, "movements": out}
+
+
 def summary(state, now):
     cutoff = now - WINDOW_S
     ac = state["aircraft"].values()
@@ -1138,11 +1182,19 @@ def main(argv=None):
         history = update_history(history, state, now, metar, qnh=qnh)
         if AIRCRAFT_DB:
             add_aircraft(history, AIRCRAFT_DB)
+    if MOVES_OUT and AIRCRAFT_DB:
+        update_airframes(state, AIRCRAFT_DB)
     write_atomic(STATE_PATH, json.dumps(state, separators=(",", ":")), 0o600)
     if history is not None:
         write_atomic(GA_HISTORY, json.dumps(history, separators=(",", ":"), ensure_ascii=False), 0o600)
         write_atomic(GA_OUT, json.dumps(public_history(history, now), separators=(",", ":"), ensure_ascii=False))
     write_atomic(OUT_PATH, json.dumps(summary(state, now)))
+    if MOVES_OUT:
+        try:
+            write_atomic(MOVES_OUT, json.dumps(public_movements(state, history, now), separators=(",", ":")))
+        except OSError as e:
+            print(f"[{stamp}] cannot write {MOVES_OUT}: {e}", file=sys.stderr)
+            rc = 1
     return rc
 
 
