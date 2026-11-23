@@ -966,7 +966,7 @@ def update_history(history, state, now, metar_text=None, trace_loader=None, qnh=
             again = any(o["hex"] == h["hex"] and o.get("arr_t") == later[0][0] for o in history)
             h["outcome"] = {"status": "again" if again else "landed", "t": later[0][0], "rwy": later[0][2]}
         elif now - h["t"] > OUTCOME_WAIT_S:
-            h["outcome"] = {"status": "not_landed"}
+            h["outcome"] = {"status": "not_landed", "within_s": OUTCOME_WAIT_S}
         else:
             h["outcome"] = {"status": "pending"}
         start, end = track_span(h)

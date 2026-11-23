@@ -160,6 +160,8 @@ the Docker layout (`docker/nginx.conf`).
   runway geometry for drawing the tracks. `done` turns true once the entry
   is settled: its outcome no longer changes (an arrival that looked like a
   landing can still become another go-around) and the track is complete.
+  An `outcome` of `not_landed` carries `within_s`, the time waited for a
+  landing (3600).
   `nth` is 2 (3, ...) when the same airframe with the same callsign went
   around within the previous 2 hours. `reg` and `type` (ICAO type
   designator) come from the tar1090 aircraft database; null when unknown.

@@ -8,22 +8,32 @@
 (function (root) {
     'use strict';
 
-    // {dir, spd, gust, unit, vrb, calm, varFrom, varTo} from a raw METAR, or null
+    // One wind group ("29015G25KT", "VRB03KT", "05010MPS") as
+    // {dir, spd, gust, unit, vrb, calm, varFrom, varTo}, or null.
+    // dir is as reported (360 stays 360; null for VRB); calm when the speed is 0.
+    // Also used by airband's METAR / TAF decoders (one parser for both).
+    function parseWindToken(token) {
+        const m = typeof token === 'string' && token.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/);
+        if (!m) return null;
+        const spd = +m[2];
+        return {
+            dir: m[1] === 'VRB' ? null : +m[1],
+            spd, gust: m[3] ? +m[3] : null, unit: m[4] === 'KT' ? 'kt' : 'm/s',
+            vrb: m[1] === 'VRB', calm: spd === 0, varFrom: null, varTo: null,
+        };
+    }
+
+    // The wind of a raw METAR (its first wind group, with the variable
+    // sector after it), or null; nothing from RMK or a trend on.
     function parseWind(metar) {
         if (typeof metar !== 'string') return null;
-        const tokens = metar.trim().split(/\s+/);
         let w = null;
-        for (const t of tokens) {
+        for (const t of metar.trim().split(/\s+/)) {
             if (t === 'RMK' || t === 'NOSIG' || t === 'BECMG' || t === 'TEMPO') break;
             let m;
-            if (!w && (m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) {
-                const spd = +m[2];
-                w = {
-                    dir: m[1] === 'VRB' ? null : +m[1] % 360,
-                    spd, gust: m[3] ? +m[3] : null, unit: m[4] === 'KT' ? 'kt' : 'm/s',
-                    vrb: m[1] === 'VRB', calm: spd === 0, varFrom: null, varTo: null,
-                };
-            } else if (w && (m = t.match(/^(\d{3})V(\d{3})$/))) {
+            if (!w) {
+                w = parseWindToken(t);
+            } else if ((m = t.match(/^(\d{3})V(\d{3})$/))) {
                 w.varFrom = +m[1];
                 w.varTo = +m[2];
             }
@@ -92,7 +102,7 @@
             ? `${String(w.varFrom).padStart(3, '0')}V${String(w.varTo).padStart(3, '0')}` : null;
     }
 
-    const Wind = { parseWind, runwayEnds, components, componentText, windLines, dirText, speedText, gustText, varText };
+    const Wind = { parseWindToken, parseWind, runwayEnds, components, componentText, windLines, dirText, speedText, gustText, varText };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Wind;
         return;

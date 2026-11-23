@@ -571,7 +571,7 @@ class History(unittest.TestCase):
     def test_not_landed_after_an_hour(self):
         st = self.ga_state()
         h = cs.update_history([], st, T0 + 65 + cs.OUTCOME_WAIT_S + 1, None, lambda hx: None)
-        self.assertEqual(h[0]["outcome"], {"status": "not_landed"})
+        self.assertEqual(h[0]["outcome"], {"status": "not_landed", "within_s": cs.OUTCOME_WAIT_S})
 
     def test_history_outlives_the_24h_state(self):
         st = self.ga_state()
