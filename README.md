@@ -92,6 +92,37 @@ This starts three containers:
 - Arrivals stay at 0 while aircraft land: the airport's gate may not fit
   your reception; run the `--check-runways` command below.
 
+## Using the console
+
+- **Windows.** The buttons at the top right open and close them. Drag a
+  window by its title bar; GO-AROUNDS and MOVEMENTS resize from the
+  bottom-right corner. Which windows are open, and where, is remembered in
+  the browser (localStorage).
+- **MOVEMENTS** lists the last 24 hours, rolling (not since midnight), with
+  a line for each day. A blue bar and badge mark an arrival (ARR), a green
+  one a departure (DEP); the counts match LAST 24H. Click a row to see that
+  flight on the map, centred on the airport:
+  - **LIVE** while it is still on its way (up to 15 minutes after a
+    departure, 3 after an arrival): the aircraft is selected on the live
+    map and its track keeps growing.
+  - **TRACE** afterwards: tar1090's history view of that part of the
+    flight (15 minutes of approach before an arrival, 15 minutes of climb
+    after a departure), loaded once.
+
+  The line above the list says which flight is shown; **× LIVE MAP** (or
+  the same row again) goes back to the live map. A **G/A** mark opens that
+  go-around in GO-AROUNDS.
+- **The map is tar1090.** toganomon only tells it which aircraft, day,
+  time span and zoom to show; tar1090 draws the rest:
+  - The track colour is the barometric altitude, as in the ALTITUDE bar at
+    the bottom (orange near the ground, yellow and green through the
+    climb, blue to magenta at cruise; grey on the ground). A thin, dark
+    stretch is estimated: nothing was received there.
+  - In a trace, times (UTC) label its two ends and where each flight
+    starts and ends. The **K** button labels every point with altitude and
+    time.
+  - How far back a trace can go depends on ultrafeeder's globe history.
+
 ## Airport data
 
 An airport in [`airports.json`](airports.json) needs only its ICAO code
