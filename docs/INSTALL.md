@@ -290,8 +290,8 @@ own way.
   (the magnetic heading) the same airport shows `measured 150.4 (-6.6)`.
   Exit code 1: a runway had no pass at all.
 - Go-arounds are listed in `go-arounds.json`, newest first. The `outcome`
-  of each (landed / went around again / did not land within 60 minutes) and
-  its `track` are updated until the entry is settled (`done: true`). That
+  of each (landed / went around again / did not land within 60 minutes,
+  `{"status": "not_landed", "within_s": 3600}`) and its `track` are updated until the entry is settled (`done: true`). That
   is usually 20–30 minutes later, or 1–2 hours when it did not land.
 
 ## 8. Web view (optional)
