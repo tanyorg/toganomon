@@ -1,4 +1,17 @@
-/* toganomon MOVEMENTS window (movements.js): filter tabs, then a scrolling list. */
+/* toganomon MOVEMENTS window (movements.js): filter tabs, then a scrolling list.
+   .mv-window on the window (with float.css's .float .float-fill) sizes it;
+   a page may override the size. */
+.mv-window {
+    width: 340px;
+    height: 60vh;
+    min-width: 260px;
+    min-height: 160px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 80px);
+    resize: both;               /* float.js keeps the size */
+}
+.mv-window .float-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 6px 8px; }
+.mv-window .mv-view { flex: 1; }
 .mv-view { display: flex; flex-direction: column; min-height: 0; font-size: 0.72rem; }
 .mv-bar { display: flex; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid #30363d; }
 .mv-tab, .mv-back, .mv-ga button {

@@ -54,5 +54,5 @@ go_arounds = "/var/www/html/toganomon/go-arounds.json"
 # metar = "/var/www/html/metar.txt"   # raw METAR text for the QNH correction and wind
 # log = "/var/log/toganomon-events.log" # one line per go-around
 # movements_log = "/var/log/toganomon-movements.log" # one line per arrival/departure
-# movements = "/var/www/html/toganomon/movements.json" # last 24 h of movements (console)
+# movements = "/var/www/html/toganomon/movements.json" # default: next to summary; "" = off
 # aircraft_db = "/usr/local/share/tar1090/git-db/db" # tar1090-db: registration and type
