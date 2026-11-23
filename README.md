@@ -32,6 +32,9 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
     last go-around when there was none in 24 hours, and the aircraft the
     receiver saw.
   - **GO-AROUNDS**: every go-around; each opens to a north-up track figure.
+  - **MOVEMENTS**: the arrivals and departures of the last 24 hours with
+    callsign, type and registration; a row shows that flight's track on
+    the map, a G/A mark opens its go-around.
   - METAR and TAF in the header, UTC and local clocks.
 
 It reads [readsb](https://github.com/wiedehopf/readsb)'s per-aircraft
@@ -165,6 +168,9 @@ the Docker layout (`docker/nginx.conf`).
   `nth` is 2 (3, ...) when the same airframe with the same callsign went
   around within the previous 2 hours. `reg` and `type` (ICAO type
   designator) come from the tar1090 aircraft database; null when unknown.
+- `movements.json`: the arrivals and departures of the last 24 h, newest
+  first, with registration, type and the go-around each belongs to (the
+  MOVEMENTS window).
 - `movements.log`: one tab-separated line per arrival or departure: UTC
   time, `arr`/`dep`, runway, hex, callsign, ground speed (kt), emitter
   category. The long-term record of traffic, e.g. for go-arounds per 100

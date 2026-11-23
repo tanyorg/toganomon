@@ -195,6 +195,7 @@ go_arounds = "/var/www/html/toganomon/go-arounds.json"
 # metar = "/path/to/metar.txt"                          # section 5
 # log = "/var/log/toganomon/events.log"            # one line per go-around
 # movements_log = "/var/log/toganomon/movements.log" # one line per arrival / departure
+# movements = "/var/www/html/toganomon/movements.json" # last 24 h of movements (console)
 # aircraft_db = "/usr/local/share/tar1090/git-db/db"     # tar1090-db: registration and type
 # airports = "/usr/local/share/toganomon/airports.json"  # default: next to the script, then this
 ```
@@ -206,6 +207,10 @@ Keep `state` and `history` on persistent storage (not `/run` or a tmpfs).
   category). It is the long-term record of traffic, e.g. for go-arounds per
   100 arrivals. It is only ever appended to; after the state is lost the
   rebuilt 24 hours are appended again, so dedupe by time, kind and hex.
+- `movements`: the arrivals and departures of the last 24 hours, newest
+  first, as JSON for the console's MOVEMENTS window (registration and type
+  with `aircraft_db`, and the go-around a movement belongs to). Off unless
+  set.
 - `aircraft_db`: the `db` directory of tar1090-db (gzipped JSON files named
   by hex prefix). tar1090's installer puts it at
   `/usr/local/share/tar1090/git-db/db` and keeps it up to date. Each
