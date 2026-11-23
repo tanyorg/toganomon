@@ -698,9 +698,13 @@ class MovementsOut(unittest.TestCase):
     def test_config_key(self):
         with open(RJFF_TOML, "rb") as f:
             doc = tomllib.load(f)
-        self.assertIsNone(cs.parse_config(doc)["paths"]["movements"])
-        doc.setdefault("paths", {})["movements"] = "/srv/toganomon/movements.json"
+        paths = doc.setdefault("paths", {})
+        paths["summary"] = "/srv/out/summary.json"
+        self.assertEqual(cs.parse_config(doc)["paths"]["movements"], "/srv/out/movements.json")   # next to it
+        paths["movements"] = "/srv/toganomon/movements.json"
         self.assertEqual(cs.parse_config(doc)["paths"]["movements"], "/srv/toganomon/movements.json")
+        paths["movements"] = ""
+        self.assertIsNone(cs.parse_config(doc)["paths"]["movements"])                             # off
 
 def metar_at(t, rest):
     """METAR text observed at epoch t."""

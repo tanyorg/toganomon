@@ -41,7 +41,8 @@ hex). Each new movement (arrival or departure) can likewise be appended to
 the optional movements log, the long-term record of how many aircraft used
 which runway (the state keeps only the last 24 hours). With aircraft_db (a
 tar1090-db directory) each go-around also gets the registration and type,
-looked up once. The optional movements JSON lists the last 24 hours of
+looked up once. The movements JSON (next to the summary unless [paths]
+movements says otherwise; "" turns it off) lists the last 24 hours of
 movements, newest first, for the console's MOVEMENTS window (with the
 registration and type when aircraft_db is set, and the go-around each
 belongs to).
@@ -162,7 +163,7 @@ DEFAULTS = {
         "metar": None,
         "log": None,
         "movements_log": None,
-        "movements": None,
+        "movements": None,          # default: movements.json next to the summary
         "aircraft_db": None,
         "airports": None,
     },
@@ -297,6 +298,12 @@ def parse_config(doc, airports=None):
             raise ConfigError(f"[[runway]] #{i + 1}: designator used twice")
         seen |= set(rw["ends"])
         cfg["runways"].append(rw)
+    p = cfg["paths"]
+    if p["movements"] is None:
+        # next to the summary unless set; "" turns it off
+        p["movements"] = os.path.join(os.path.dirname(p["summary"]), "movements.json")
+    elif p["movements"] == "":
+        p["movements"] = None
     return cfg
 
 
