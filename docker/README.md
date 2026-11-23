@@ -18,10 +18,11 @@ tar1090-db directory.
 
 To fill the go-around list from another toganomon installation, copy its
 history (`[paths] history`, a JSON list) into the volume. The `go_arounds`
-list of a published `go-arounds.json` works too:
+list of a published `go-arounds.json` works too, put back in time order
+(the history is oldest first, the published list newest first):
 
 ```sh
-python3 -c 'import json,sys; json.dump(json.load(open(sys.argv[1]))["go_arounds"], open("history.json","w"))' go-arounds.json
+python3 -c 'import json,sys; json.dump(sorted(json.load(open(sys.argv[1]))["go_arounds"], key=lambda g: g["t"]), open("history.json","w"))' go-arounds.json
 docker compose cp history.json toganomon:/var/lib/toganomon/go_arounds.json
 docker compose exec -u root toganomon chown toganomon:toganomon /var/lib/toganomon/go_arounds.json
 ```
