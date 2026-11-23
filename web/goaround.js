@@ -13,8 +13,9 @@
 //   extraLinks(g, element)    add more links to an open entry (may be async)
 //   storage: { load() -> object | null, save(object) }   which entries are open
 //            (default: localStorage key 'toganomon')
-// Returns { refresh(), stop(), fit() }; fit() re-lays out the open figures
-// after the container was resized.
+// Returns { refresh(), stop(), fit(), show(id) }; fit() re-lays out the open
+// figures after the container was resized; show(id) opens that go-around and
+// scrolls it into view.
 //
 // The functions in GoAroundView other than mount() do not touch the DOM
 // (tests/web_test.js).
@@ -324,6 +325,7 @@
                 const isOpen = open.has(g.id);
                 const item = document.createElement('div');
                 item.className = 'ga-item' + (isOpen ? ' open' : '');
+                item.dataset.id = g.id;
                 const head = document.createElement('button');
                 head.className = 'ga-head';
                 head.textContent = `${isOpen ? '▾' : '▸'} ${title(g, o.timeZone)}`;
@@ -363,9 +365,19 @@
             timer = null;
         }
 
+        function show(id) {
+            if (!items.some(g => g.id === id)) return false;
+            open.add(id);
+            save(items.map(x => x.id));
+            render();
+            const item = [...list.querySelectorAll('.ga-item')].find(x => x.dataset.id === id);
+            if (item) item.scrollIntoView({ block: 'start' });
+            return true;
+        }
+
         refresh();
         if (o.pollMs > 0) timer = setInterval(refresh, o.pollMs);
-        return { refresh, stop, fit };
+        return { refresh, stop, fit, show };
     }
 
     const api = {
