@@ -5,14 +5,16 @@
 //   const mv = Movements.mount(element, {
 //       url: '/toganomon/movements.json',   // polled every pollMs (60000; 0 = no polling)
 //       timeZone: 'Asia/Tokyo',             // times in the list (default UTC)
-//       onSelect(m) {},     // a row was clicked (m: one movement); null for LIVE
+//       onSelect(m) {},     // a row was clicked (m: one movement); null to go back to the live map
 //       onGa(id) {},        // the G/A mark of a row was clicked (go-around id)
 //   });
 //   -> { refresh(), stop() }
 //
 // A row's flight on the tar1090 map: Movements.traceParams(m) gives the
 // query (icao, showTrace, startTime, endTime) for tar1090's history view
-// of that aircraft around the movement.
+// of that aircraft around the movement. While one is shown, a line above
+// the list says so, with a button back to the live map.
+// The list has a line for each day (in timeZone).
 // Everything but mount() is DOM-free (tests/console_test.js).
 (function (root) {
     'use strict';
@@ -31,6 +33,34 @@
         return new Intl.DateTimeFormat('en-GB', {
             timeZone: timeZone || 'UTC', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
         }).format(new Date(t * 1000));
+    }
+
+    // "2026-11-24 TUE" in timeZone (the list's day lines)
+    function dayText(t, timeZone) {
+        const p = {};
+        for (const x of new Intl.DateTimeFormat('en-US', {
+            timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+        }).formatToParts(new Date(t * 1000))) p[x.type] = x.value;
+        return `${p.year}-${p.month}-${p.day} ${p.weekday.toUpperCase()}`;
+    }
+
+    // The list's items, in order: {day} before the first movement of each day, then {m}.
+    function withDays(rows, timeZone) {
+        const out = [];
+        let last = null;
+        for (const m of rows) {
+            const day = dayText(m.t, timeZone);
+            if (day !== last) out.push({ day });
+            last = day;
+            out.push({ m });
+        }
+        return out;
+    }
+
+    // The line above the list while a flight is on the map.
+    function showingText(m, timeZone) {
+        const c = cells(m, timeZone);
+        return `MAP: ${c.flight} ${m.kind === 'arr' ? 'ARR' : 'DEP'} ${c.time}`;
     }
 
     // Movements to list for a filter, and the count for each filter.
@@ -102,15 +132,19 @@
             tabs[f] = b;
             bar.appendChild(b);
         }
-        const live = document.createElement('button');
-        live.className = 'mv-live';
-        live.textContent = 'LIVE';
-        live.title = 'back to the live map';
-        live.addEventListener('click', () => select(null));
-        bar.appendChild(live);
+        // shown while a flight's track is on the map
+        const showing = document.createElement('div');
+        showing.className = 'mv-showing';
+        const showingText_ = document.createElement('span');
+        const back = document.createElement('button');
+        back.className = 'mv-back';
+        back.textContent = '× LIVE MAP';
+        back.title = 'back to the live map of all aircraft';
+        back.addEventListener('click', () => select(null));
+        showing.append(showingText_, back);
         const list = document.createElement('div');
         list.className = 'mv-list';
-        el.append(bar, list);
+        el.append(bar, showing, list);
 
         function select(m) {
             selected = m;
@@ -153,7 +187,8 @@
                 tabs[f].textContent = `${f} ${v.counts[f]}`;
                 tabs[f].classList.toggle('active', f === filter);
             }
-            live.hidden = !selected;
+            showing.hidden = !selected;
+            if (selected) showingText_.textContent = showingText(selected, o.timeZone);
             const scroll = list.scrollTop;      // kept across polls
             list.textContent = '';
             if (!doc) {
@@ -167,7 +202,16 @@
                 list.appendChild(empty);
                 return;
             }
-            for (const m of v.rows) list.appendChild(row(m));
+            for (const x of withDays(v.rows, o.timeZone)) {
+                if (x.m) {
+                    list.appendChild(row(x.m));
+                } else {
+                    const d = document.createElement('div');
+                    d.className = 'mv-day';
+                    d.textContent = x.day;
+                    list.appendChild(d);
+                }
+            }
             list.scrollTop = scroll;
         }
 
@@ -193,7 +237,7 @@
         return { refresh, stop };
     }
 
-    const Movements = { mount, view, cells, traceParams, sameMovement, hhmm };
+    const Movements = { mount, view, cells, traceParams, sameMovement, hhmm, dayText, withDays, showingText };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Movements;
         return;

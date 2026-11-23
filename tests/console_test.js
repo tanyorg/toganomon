@@ -214,6 +214,21 @@ t('Movements.traceParams: the approach or the climb, inside the UTC day', () => 
     assert.strictEqual(M.traceParams(late).endTime, '23:59:59');
 });
 
+t('Movements.withDays: a line before each day, in the zone', () => {
+    const late = { t: Date.UTC(2026, 10, 23, 15, 30, 0) / 1000, kind: 'dep', hex: 'a' };   // 00:30 JST on the 24th
+    const rows = [MV.movements[0], late, { t: Date.UTC(2026, 10, 23, 14, 30, 0) / 1000, kind: 'arr', hex: 'b' }];
+    assert.deepStrictEqual(M.withDays(rows, 'Asia/Tokyo').map(x => x.day || x.m.hex),
+        ['2026-11-24 TUE', '888165', 'a', '2026-11-23 MON', 'b']);
+    assert.deepStrictEqual(M.withDays(rows, 'UTC').map(x => x.day || x.m.hex),
+        ['2026-11-24 TUE', '888165', '2026-11-23 MON', 'a', 'b']);
+    assert.deepStrictEqual(M.withDays([], 'UTC'), []);
+});
+
+t('Movements.showingText: which flight the map shows', () => {
+    assert.strictEqual(M.showingText(MV.movements[0], 'Asia/Tokyo'), 'MAP: HVN356 ARR 16:04');
+    assert.strictEqual(M.showingText(MV.movements[1], 'UTC'), 'MAP: 8681B7 DEP 07:03');
+});
+
 t('Movements.sameMovement and Console.traceUrl', () => {
     assert.strictEqual(M.sameMovement(MV.movements[1], { ...MV.movements[1] }), true);
     assert.strictEqual(M.sameMovement(MV.movements[1], MV.movements[2]), false);

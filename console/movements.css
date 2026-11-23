@@ -1,7 +1,7 @@
 /* toganomon MOVEMENTS window (movements.js): filter tabs, then a scrolling list. */
 .mv-view { display: flex; flex-direction: column; min-height: 0; font-size: 0.72rem; }
 .mv-bar { display: flex; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid #30363d; }
-.mv-tab, .mv-live, .mv-ga button {
+.mv-tab, .mv-back, .mv-ga button {
     background: #0d1117;
     border: 1px solid #30363d;
     border-radius: 3px;
@@ -12,8 +12,31 @@
     cursor: pointer;
 }
 .mv-tab.active { color: #c9d1d9; border-color: #8b949e; }
-.mv-live { margin-left: auto; color: #3fb950; border-color: #238636; }
-.mv-live[hidden] { display: none; }
+/* while one flight's track is on the map */
+.mv-showing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: #1f2937;
+    border: 1px solid #388bfd;
+    border-radius: 3px;
+    color: #c9d1d9;
+}
+.mv-showing[hidden] { display: none; }
+.mv-showing span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-back { color: #3fb950; border-color: #238636; }
+.mv-day {
+    position: sticky;
+    top: 0;
+    padding: 4px 2px 2px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    color: #f0b72f;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+}
 .mv-list { flex: 1; min-height: 0; overflow-y: auto; }
 .mv-row {
     display: grid;
