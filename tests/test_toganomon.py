@@ -344,7 +344,39 @@ class GoAround(unittest.TestCase):
         self.assertEqual([(e[4], e[5]) for e in ev], [(140, "A3"), (140, "A3")])
         st = cs.load_state("/nonexistent", T0)
         cs.record_movements(st, "abcdef", ev, T0 + 300)
-        self.assertEqual(st["movements"][0][3:], ["abcdef", "HGB308", 140, "A3"])
+        self.assertEqual(st["movements"][0][3:], ["abcdef", "HGB308", 140, "A3", False])
+
+    def landing_doc(self, ground_gs):
+        # descending to the runway (arrival), on the ground at ground_gs, lifting off 8 minutes later
+        arr = pass_trace(0, 5, 0, 900, -100, H16, -700)
+        dep = pass_trace(0, 0, 5, -100, 900, H16, 2400)
+        ground = [[100.0 + 20 * i] + arr["trace"][-1][1:3] + ["ground", ground_gs, H16] for i in range(20)]
+        trace = arr["trace"] + ground + [[p[0] + 480] + p[1:] for p in dep["trace"]]
+        return {"icao": "aa416f", "timestamp": T0, "trace": trace}
+
+    def test_landed_and_lifted_off_is_no_go_around(self):
+        # KJFK 2026-11-15: a helicopter sending category A1 landed, then left 8 minutes later
+        ev = cs.detect_movements(self.landing_doc(45.0))
+        self.assertEqual([(e[1], e[6]) for e in ev], [("arr", False), ("dep", True)])
+        st = cs.load_state("/nonexistent", T0)
+        cs.record_movements(st, "aa416f", ev, T0 + 900)
+        self.assertEqual(cs.find_go_arounds(st["movements"]), [])
+
+    def test_touch_and_go_fast_on_the_runway_is_a_go_around(self):
+        ev = cs.detect_movements(self.landing_doc(110.0))
+        self.assertEqual([(e[1], e[6]) for e in ev], [("arr", False), ("dep", False)])
+        st = cs.load_state("/nonexistent", T0)
+        cs.record_movements(st, "aa416f", ev, T0 + 900)
+        self.assertEqual([g["hex"] for g in cs.find_go_arounds(st["movements"])], ["aa416f"])
+
+    def test_taxi_before_the_flight_does_not_count(self):
+        # slow on the ground before an earlier departure: the landed flag starts again at each arrival
+        taxi = [[float(i), *gate_point(0, -1.5, 0.0, "ground", H16, 0)[1:3], "ground", 15.0, H16] for i in range(5)]
+        doc = self.go_around_doc(T0 + 3600)
+        doc["trace"] = taxi + [[p[0] + 3600] + p[1:] for p in doc["trace"]]
+        doc["timestamp"] = T0
+        ev = cs.detect_movements(doc)
+        self.assertEqual([(e[1], e[6]) for e in ev], [("arr", False), ("dep", False)])
 
     def test_slow_or_rotorcraft_arrivals_are_not_go_arounds(self):
         moves = [

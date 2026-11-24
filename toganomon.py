@@ -35,7 +35,9 @@ from trace_full_* files.
 A probable go-around is an arrival followed by a departure of the same
 aircraft on the same runway within the go-around window; a real turnaround
 takes far longer. Arrivals slower than min_gs_kt or of excluded emitter
-categories (rotorcraft, A7) are not paired. Each new go-around is appended
+categories (rotorcraft, A7) are not paired, nor a departure after the
+aircraft was on the ground slower than min_gs_kt (it landed; a rotorcraft
+that sends a wrong category is caught here). Each new go-around is appended
 to the optional log as one tab-separated line (UTC time, callsign, runway,
 hex). Each new movement (arrival or departure) can likewise be appended to
 the optional movements log, the long-term record of how many aircraft used
@@ -497,7 +499,12 @@ def _climb_confirmed(pts, i):
 
 def detect_movements(doc, alt_offset=0.0, now=None):
     """readsb trace document -> [(time, kind, runway, callsign, ground speed kt,
-    emitter category)]; the last three may be None.
+    emitter category, landed)]; callsign, speed and category may be None.
+    landed (departures only, else False): the aircraft was on the ground
+    slower than GA_MIN_GS_KT since its last arrival, so the departure is a
+    new flight, not a go-around (KJFK 2026-11-15: a helicopter that sent
+    category A1 landed and lifted off 8 minutes later). A touch-and-go
+    stays faster on the runway.
 
     One event per pass: the same kind again within DEDUP_S is the same pass,
     unless the other kind came in between. With now (the per-minute run), a
@@ -512,11 +519,14 @@ def detect_movements(doc, alt_offset=0.0, now=None):
     pts = [p for p in doc.get("trace") or []
            if isinstance(p, list) and p and isinstance(p[0], (int, float))]
     last_ground = None
+    landed = False
     for i, p in enumerate(pts):
         flight = _flight(p) or flight
         cat = _category(p) or cat
         if len(p) > 3 and p[3] == "ground":
             last_ground = t0 + p[0]
+            gs = _gs(p)
+            landed = landed or (gs is not None and gs < GA_MIN_GS_KT)
         hit = classify_point(p, alt_offset)
         if not hit:
             continue
@@ -534,7 +544,9 @@ def detect_movements(doc, alt_offset=0.0, now=None):
                 continue
         last[hit[0]] = t
         last.pop(OTHER[hit[0]], None)
-        out.append((t, hit[0], hit[1], ident_flight, _gs(p), ident_cat))
+        out.append((t, hit[0], hit[1], ident_flight, _gs(p), ident_cat, hit[0] == "dep" and landed))
+        if hit[0] == "arr":
+            landed = False
     return out
 
 
@@ -569,16 +581,17 @@ def _same_pass(moves, hx, kind, t):
 def record_movements(state, hx, events, now):
     """Add one aircraft's events, skipping ones already recorded, and prune.
 
-    A movement is [time, kind, runway, hex, callsign, ground speed, category]
-    (the last three may be None; older states have only the first five).
+    A movement is [time, kind, runway, hex, callsign, ground speed, category,
+    landed] (callsign, speed and category may be None; older states have
+    only the first five or seven).
     """
     moves = state.setdefault("movements", [])
     for e in events:
         t, kind, rwy = e[:3]
-        flight, gs, cat = (list(e[3:6]) + [None] * 3)[:3]
+        flight, gs, cat, landed = (list(e[3:7]) + [None] * 4)[:4]
         if t < now - WINDOW_S or _same_pass(moves, hx, kind, t):
             continue
-        moves.append([t, kind, rwy, hx, flight, gs, cat])
+        moves.append([t, kind, rwy, hx, flight, gs, cat, bool(landed)])
     cutoff = now - WINDOW_S
     moves[:] = sorted((m for m in moves if m[0] >= cutoff), key=lambda m: m[0])
     return state
@@ -749,7 +762,8 @@ def _ga_capable(m):
 
 
 def find_go_arounds(moves):
-    """Arrival -> departure pairs of one aircraft on one runway within GA_WINDOW_S.
+    """Arrival -> departure pairs of one aircraft on one runway within GA_WINDOW_S,
+    unless the aircraft landed in between (the departure's landed flag).
 
     Returns [{"t": departure time, "arr_t", "hex", "flight", "rwy", "gs"
     (arrival ground speed), "category"}].
@@ -762,7 +776,8 @@ def find_go_arounds(moves):
             last_arr[hx] = m
             continue
         a = last_arr.pop(hx, None)
-        if a and a[2] == rwy and 0 < t - a[0] <= GA_WINDOW_S and _ga_capable(a):
+        landed = len(m) > 7 and m[7]
+        if a and a[2] == rwy and 0 < t - a[0] <= GA_WINDOW_S and _ga_capable(a) and not landed:
             cat = (m[6] if len(m) > 6 else None) or (a[6] if len(a) > 6 else None)
             out.append({"t": t, "arr_t": a[0], "hex": hx,
                         "flight": flight or (a[4] if len(a) > 4 else None), "rwy": rwy,

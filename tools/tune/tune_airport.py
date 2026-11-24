@@ -287,7 +287,7 @@ def replay(tg, docs, series):
         moves = state.setdefault("movements", [])
         for e in events:
             if not tg._same_pass(moves, doc["icao"], e[1], e[0]):
-                moves.append([e[0], e[1], e[2], doc["icao"]] + list(e[3:6]))
+                moves.append([e[0], e[1], e[2], doc["icao"]] + list(e[3:7]))
     state["movements"].sort(key=lambda m: m[0])
     return state["movements"]
 
