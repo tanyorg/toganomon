@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests for the DOM-free parts of console/wind.js, console/stats.js,
-// console/clock.js, console/float.js, console/movements.js and console/console.js. Run: node tests/console_test.js
+// console/clock.js, console/float.js, console/movements.js, console/wx.js and console/console.js. Run: node tests/console_test.js
 'use strict';
 const assert = require('assert');
 const path = require('path');
@@ -10,6 +10,7 @@ const C = require(path.join(__dirname, '..', 'console', 'console.js'));
 const S = require(path.join(__dirname, '..', 'console', 'stats.js'));
 const K = require(path.join(__dirname, '..', 'console', 'clock.js'));
 const M = require(path.join(__dirname, '..', 'console', 'movements.js'));
+const X = require(path.join(__dirname, '..', 'console', 'wx.js'));
 
 let failed = 0;
 function t(label, fn) {
@@ -246,6 +247,36 @@ t('Movements.sameMovement and Console.traceUrl', () => {
         '/tar1090/?icao=888165&showTrace=2026-11-24&startTime=06%3A49%3A29&endTime=07%3A07%3A29'
         + '&zoom=10&lat=10.5000&lon=20.2500');
     assert.strictEqual(C.traceUrl({ icao: 'abc' }, null, 11), '/tar1090/?icao=abc&zoom=11');
+});
+
+const iso = d => d && d.toISOString();
+
+t('Wx.resolveDayTime: month rollover both ways, hour 24', () => {
+    assert.strictEqual(iso(X.resolveDayTime(31, 23, 30, new Date('2026-11-01T00:10:00Z'))), '2026-10-31T23:30:00.000Z');
+    assert.strictEqual(iso(X.resolveDayTime(1, 12, 0, new Date('2026-10-31T06:00:00Z'))), '2026-11-01T12:00:00.000Z');
+    assert.strictEqual(iso(X.resolveDayTime(28, 24, 0, new Date('2026-10-28T12:00:00Z'))), '2026-10-29T00:00:00.000Z');
+});
+
+t('Wx.metarTime / tafValidTo from the raw text', () => {
+    const now = new Date('2026-11-24T00:40:00Z');
+    assert.strictEqual(iso(X.metarTime('RJFF 240030Z 21004KT 9999 FEW005 12/12 Q1017', now)), '2026-11-24T00:30:00.000Z');
+    assert.strictEqual(iso(X.metarTime('METAR RJFF 240030Z 21004KT', now)), '2026-11-24T00:30:00.000Z');
+    assert.strictEqual(X.metarTime('RJFF NIL', now), null);
+    assert.strictEqual(X.metarTime(null, now), null);
+    assert.strictEqual(iso(X.tafValidTo('TAF RJFF 231705Z 2318/2500 15018KT 9999 TEMPO 2318/2400 3000 SHRA', now)),
+        '2026-11-25T00:00:00.000Z');
+    assert.strictEqual(X.tafValidTo('TAF RJFF 231705Z NIL', now), null);
+});
+
+t('Wx.formatAge / metarLevel / tafLevel', () => {
+    assert.deepStrictEqual([0, 12, 60, 65, null].map(X.formatAge), ['0m', '12m', '1h00m', '1h05m', '?']);
+    assert.strictEqual(X.minutesSince(new Date('2026-11-24T00:30:00Z'), new Date('2026-11-24T00:42:59Z')), 12);
+    assert.deepStrictEqual([10, 90, 179, 180, null].map(m => X.metarLevel(m)), ['ok', 'warn', 'warn', 'alert', 'alert']);
+    assert.deepStrictEqual([59, 60, 120].map(m => X.metarLevel(m, 60, 120)), ['ok', 'warn', 'alert']);
+    const end = new Date('2026-11-25T00:00:00Z');
+    assert.strictEqual(X.tafLevel(end, new Date('2026-11-24T23:59:00Z')), 'ok');
+    assert.strictEqual(X.tafLevel(end, end), 'alert');
+    assert.strictEqual(X.tafLevel(null), 'alert');
 });
 
 if (failed) {

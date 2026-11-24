@@ -168,6 +168,17 @@ t('legend and flight link', () => {
     assert.strictEqual(v.flightAware({ ...base, flight: null }), null);
 });
 
+t('chime: nothing without a running AudioContext', () => {
+    assert.strictEqual(v.chime(), false);
+    assert.strictEqual(v.chime({ state: 'suspended' }), false);
+    let started = 0;
+    const node = () => ({ connect: x => x, start: () => started++, stop() {}, frequency: {},
+        gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } });
+    const ctx = { state: 'running', currentTime: 0, destination: {}, createOscillator: node, createGain: node };
+    assert.strictEqual(v.chime(ctx), true);
+    assert.strictEqual(started, 2);                    // two tones
+});
+
 if (failed) {
     console.log(`${failed} failed`);
     process.exit(1);

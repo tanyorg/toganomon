@@ -13,6 +13,8 @@
 //   extraLinks(g, element)    add more links to an open entry (may be async)
 //   storage: { load() -> object | null, save(object) }   which entries are open
 //            (default: localStorage key 'toganomon')
+// GoAroundView.unlockChime() / chime(ctx): a chime for a new go-around
+// (see below).
 // Returns { refresh(), stop(), fit(), show(id) }; fit() re-lays out the open
 // figures after the container was resized; show(id) opens that go-around and
 // scrolls it into view.
@@ -380,8 +382,35 @@
         return { refresh, stop, fit, show };
     }
 
+    // A two-tone chime for a new go-around. Browsers keep audio off until the
+    // page is used: call unlockChime() from the first user event (pointerdown).
+    // chime(ctx) plays on ctx when given and running (a page already playing
+    // audio), else on the context unlockChime() made.
+    let chimeCtx = null;
+    function unlockChime() {
+        if (chimeCtx || typeof AudioContext !== 'function') return;
+        try { chimeCtx = new AudioContext(); } catch (e) { chimeCtx = null; }
+    }
+    function chime(ctx) {
+        const c = ctx && ctx.state === 'running' ? ctx : chimeCtx;
+        if (!c || c.state !== 'running') return false;
+        const t = c.currentTime;
+        for (const [f, dt] of [[880, 0], [1320, 0.18]]) {
+            const osc = c.createOscillator();
+            const gain = c.createGain();
+            osc.frequency.value = f;
+            gain.gain.setValueAtTime(0.0001, t + dt);
+            gain.gain.exponentialRampToValueAtTime(0.25, t + dt + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.35);
+            osc.connect(gain).connect(c.destination);
+            osc.start(t + dt);
+            osc.stop(t + dt + 0.4);
+        }
+        return true;
+    }
+
     const api = {
-        mount, clock, ordinal, title, typeText, climbText, outcomeText, windText, infoLines, legend,
+        mount, unlockChime, chime, clock, ordinal, title, typeText, climbText, outcomeText, windText, infoLines, legend,
         runwayOf, trackGeometry, openIds, plotInset, flightAware,
     };
     if (typeof module === 'object' && module.exports) module.exports = api;

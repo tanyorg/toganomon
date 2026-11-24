@@ -6,7 +6,10 @@
 //   /toganomon/movements.json                             (toganomon.py)
 //   /toganomon/metar.txt, /toganomon/taf.txt              (fetch_wx.py)
 //   /tar1090/                                             (ultrafeeder)
-// Query: ?tz=<IANA zone> for the second clock and the list (default: browser).
+// Query: ?tz=<IANA zone> for the second clock and the list (default: browser);
+//        ?chime=0: no chime for a new go-around.
+// The header shows how old the METAR is (amber after 90 min, red after 180)
+// and marks an expired TAF (Wx, wx.js).
 // Pure helpers are in Console (module.exports for node tests).
 (function (root) {
     'use strict';
@@ -87,23 +90,45 @@
         if (!mapSet) setTimeout(loadAirport, 15000);
     }
 
+    // the raw reports as last read; their age is redrawn every AGE_MS
+    const wx = { metar: null, taf: null };
+    const AGE_MS = 30000;
+    const LEVEL_CLASS = { warn: 'stale-warn', alert: 'stale-alert' };
+
+    function showAge() {
+        const now = new Date();
+        const metarAge = Wx.minutesSince(Wx.metarTime(wx.metar, now), now);
+        const ml = wx.metar ? Wx.metarLevel(metarAge) : null;
+        $('metarAge').textContent = wx.metar ? Wx.formatAge(metarAge) : '';
+        $('metarAge').className = 'wx-age ' + (LEVEL_CLASS[ml] || '');
+        const tl = wx.taf ? Wx.tafLevel(Wx.tafValidTo(wx.taf, now), now) : null;
+        $('tafAge').textContent = tl === 'alert' ? 'EXPIRED' : '';
+        $('tafAge').className = 'wx-age ' + (LEVEL_CLASS[tl] || '');
+    }
+
     async function loadWx() {
         for (const kind of ['metar', 'taf']) {
             try {
                 const t = await getText(DATA + kind + '.txt');
+                wx[kind] = t || null;
                 $(kind).textContent = t || '--';
                 $(kind).title = t;
                 if (kind === 'metar') wind.update({ metar: t });
             } catch (e) {
+                wx[kind] = null;
                 $(kind).textContent = 'NOT AVAILABLE';
             }
         }
+        showAge();
     }
 
     Clock.start({ utc: $('clockUtc'), local: $('clockLocal'), label: $('clockLocalLabel'), timeZone });
     loadAirport();
     loadWx();
     setInterval(loadWx, WX_MS);
+    setInterval(showAge, AGE_MS);
+    const chimeOn = q.get('chime') !== '0';
+    if (chimeOn) document.addEventListener('pointerdown', () => GoAroundView.unlockChime(), { once: true });
 
     // Floating windows: WIND then LAST 24H down the left, GO-AROUNDS top right (defaults)
     const top = () => Float.minTop() + Float.MARGIN;
@@ -150,7 +175,10 @@
     stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
         onGa: () => ga.toggle(),
-        onIncrease: () => view.refresh(),
+        onIncrease: () => {
+            view.refresh();
+            if (chimeOn) GoAroundView.chime();
+        },
         onRunway: rwy => wind.update({ runway: rwy }),
     });
 })(typeof window !== 'undefined' ? window : globalThis);
