@@ -234,7 +234,10 @@ def shifted(center, track, cross_km):
 
 def recommend(entry, results, min_passes=MIN_PASSES):
     """(new entry, notes): track and centre from runways with enough passes;
-    a gate narrower than its traffic is widened (never narrowed)."""
+    a gate narrower than its traffic is widened (never narrowed). A group
+    (with "members", several parallel runways in one gate) keeps its centre
+    half way between them: its passes lean to the busier runway, which says
+    nothing about where the gate belongs."""
     new = copy.deepcopy(entry)
     notes = []
     for rw, r in zip(new["runways"], results):
@@ -244,8 +247,14 @@ def recommend(entry, results, min_passes=MIN_PASSES):
             continue
         old_track = rw["true_track"]
         rw["true_track"] = r["track"]
-        rw["center"] = [round(v, 6) for v in shifted(rw["center"], old_track, r["offset_km"])]
-        need = round(math.ceil((r["spread_km"] + CROSS_MARGIN_KM) * 10) / 10, 1)
+        if rw.get("members"):
+            # the gate has to reach the passes on the side they lean to
+            need = round(math.ceil((abs(r["offset_km"]) + r["spread_km"] + CROSS_MARGIN_KM) * 10) / 10, 1)
+            notes.append(f"{name}: a group ({', '.join(rw['members'])}): centre kept, "
+                         f"passes lean {r['offset_km']:+.2f} km to the busier runway")
+        else:
+            rw["center"] = [round(v, 6) for v in shifted(rw["center"], old_track, r["offset_km"])]
+            need = round(math.ceil((r["spread_km"] + CROSS_MARGIN_KM) * 10) / 10, 1)
         width = rw.get("gate_cross_km", 1.0)
         par = r.get("parallel_km")
         if par is not None and need > par / 2.0:

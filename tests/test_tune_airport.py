@@ -66,6 +66,16 @@ def day(n=40, cross=0.0, skew=0.0, start=T0):
     return docs
 
 
+def single_runway_airports(d):
+    """An airports file in d with RJFF as one runway (without "members")."""
+    entry = tt.load_toganomon().load_airports()["RJFF"]
+    entry["runways"] = [{k: v for k, v in rw.items() if k != "members"} for rw in entry["runways"]]
+    path = os.path.join(d, "airports.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"airports": {"RJFF": entry}}, f)
+    return path
+
+
 class Tune(unittest.TestCase):
     def run_tune(self, docs, **kw):
         with tempfile.TemporaryDirectory() as d:
@@ -82,7 +92,9 @@ class Tune(unittest.TestCase):
         self.assertIn("80 passes below 500 ft, track 150.3 (+0.0)", lines[1])
 
     def test_offset_traffic_moves_the_centre(self):
-        new, _, res = self.run_tune(day(cross=0.4))
+        # one runway, not RJFF's group of two (a group keeps its centre)
+        with tempfile.TemporaryDirectory() as a:
+            new, _, res = self.run_tune(day(cross=0.4), airports=single_runway_airports(a))
         self.assertEqual(res["results"][0]["offset_km"], 0.4)
         # measured again against the recommended entry: on the centreline
         tg = tt.load_toganomon()
@@ -210,7 +222,8 @@ class Tune(unittest.TestCase):
         # RJFF's gate split into two parallel runways 1.7 km apart, traffic on both
         tg = tt.load_toganomon()
         base = tg.load_airports()["RJFF"]
-        rw = dict(base["runways"][0], gate_cross_km=1.0)
+        rw = {k: v for k, v in base["runways"][0].items() if k != "members"}
+        rw["gate_cross_km"] = 1.0
         entry = dict(base, runways=[dict(rw, ends=["16L", "34R"], center=tt.shifted(rw["center"], rw["true_track"], 0.85)),
                                     dict(rw, ends=["16R", "34L"], center=tt.shifted(rw["center"], rw["true_track"], -0.85))])
         tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])        # the test traces are built on the one gate
@@ -225,6 +238,16 @@ class Tune(unittest.TestCase):
         new, notes = tt.recommend(entry, [dict(r, spread_km=1.7) for r in res])
         self.assertEqual([g["gate_cross_km"] for g in new["runways"]], [1.0, 1.0])     # not widened into the other
         self.assertTrue(all("parallel runway" in n for n in notes))
+
+    def test_group_keeps_its_centre(self):
+        # RJFF is a group (16L/34R and 16R/34L in one gate): the passes lean to the busier runway, the centre stays
+        base = tt.load_toganomon().load_airports()["RJFF"]
+        r = {"ends": ["16", "34"], "passes": 100, "below_ft": 500, "parallel_km": None,
+             "track": 150.3, "offset_km": 0.45, "spread_km": 0.91}
+        new, notes = tt.recommend(base, [r])
+        self.assertEqual(new["runways"][0]["center"], base["runways"][0]["center"])
+        self.assertEqual(new["runways"][0]["gate_cross_km"], 1.6)        # reaches 0.45 + 0.91 + margin
+        self.assertTrue(any("a group (16L/34R, 16R/34L): centre kept" in n for n in notes))
 
     def test_second_approach_only_on_a_final(self):
         # low, up 2000 ft, low again: on the extended centreline it is a second approach;

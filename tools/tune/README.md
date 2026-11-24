@@ -65,6 +65,11 @@ With one day only (here 2026-11-16, north wind) it would also say:
   landing rolls (the runway itself: higher up, a departure may already be
   turning); with a receiver that does not hear that low, on the passes
   below 1500 ft as `toganomon.py --check-runways` does.
+- **a group** (an entry with `members`: parallel runways in one gate, as
+  RJFF's 16L/34R and 16R/34L): its centre stays half way between them,
+  where it belongs. The passes lean to the busier runway (KJFK's 04/22:
+  +0.45 km), so only the track is taken over, and the gate is widened if
+  the passes on that side do not fit in it.
 - **spread**: 95% of the passes are this close to the median offset. A gate
   narrower than spread + 0.2 km is widened; a much wider one is only noted
   (a group of parallel runways needs its width). Beside a parallel runway
