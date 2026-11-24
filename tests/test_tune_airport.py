@@ -226,6 +226,19 @@ class Tune(unittest.TestCase):
         self.assertEqual([g["gate_cross_km"] for g in new["runways"]], [1.0, 1.0])     # not widened into the other
         self.assertTrue(all("parallel runway" in n for n in notes))
 
+    def test_second_approach_only_on_a_final(self):
+        # low, up 2000 ft, low again: on the extended centreline it is a second approach;
+        # 5 km beside it (another airport's traffic) it is not
+        def twice(hx, cross):
+            pts = [tm.gate_point(dt, along, cross, alt, tm.H16, 0) for dt, along, alt in
+                   ((0, 12, 3000), (60, 8, 1200), (120, 5, 500), (240, 3, 2500),
+                    (600, 12, 3000), (660, 8, 1200), (720, 5, 500))]
+            return {"icao": hx, "timestamp": T0 + 12000, "trace": pts}
+        _, lines, res = self.run_tune(day(n=31) + [twice("5ec001", 0.0), twice("5ec002", 5.0)])
+        self.assertEqual([s["hex"] for s in res["second"]], ["5ec001"])
+        self.assertFalse(res["second"][0]["found"])
+        self.assertIn("second approaches (low, up 1000 ft, low again): 1, 0 of them", "\n".join(lines))
+
     def test_trim_keeps_the_points_near_the_airport(self):
         tg = tt.load_toganomon()
         tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])

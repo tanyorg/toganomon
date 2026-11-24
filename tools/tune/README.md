@@ -1,8 +1,8 @@
 # Tuning an airport's gates from recorded traffic
 
 > [!WARNING]
-> **Experimental.** This tool is new and has been tried on three airports
-> only (RJFF with one receiver, RJBB and RJTT with adsb.lol data). Its options, its output and the way it recommends a gate
+> **Experimental.** This tool is new and has been tried on five airports
+> only (RJFF with one receiver; RJBB, RJTT, KLAX and KJFK with adsb.lol data). Its options, its output and the way it recommends a gate
 > may change without notice, also in a patch release. Check every
 > recommendation by hand before it goes into `airports.json`.
 
@@ -78,6 +78,15 @@ With one day only (here 2026-11-16, north wind) it would also say:
   reference point and 1500 ft of its elevation that made no arrival or
   departure: helicopters, light aircraft beside the airport, or a gate
   that misses real traffic (look at these hexes when the count is large).
+- **second approaches**: aircraft that came within 1500 ft of the
+  airport's elevation on a runway's extended centreline (up to 15 km from
+  the runway's centre, inside the gate's width), climbed at least 1000 ft
+  and came low there again within an hour, without touching the ground:
+  go-arounds found another way, to look for the ones detection missed.
+  Each line says whether a go-around of the same aircraft was detected
+  within 10 minutes and whether the lowest point was inside a gate (one
+  outside is an early go-around, or a light aircraft doing circuits).
+  Rotorcraft and aircraft slower than `min_gs_kt` are left out.
 - **more data needed / not seen in use**: what the days did not show. Add
   days until these are gone.
 - **answer**: with `--answer`, the replay against what toganomon logged
@@ -90,5 +99,9 @@ With one day only (here 2026-11-16, north wind) it would also say:
 - Offset or curved approaches pull the measured centre towards the
   approach path; check the offset against the airport's charts before
   moving a centre by much.
+- A low flight across the far end of a gate along the runway's track can
+  count as an arrival (at KJFK two aircraft flying at about 100 ft along
+  the shore across the 13R approach, 10 to 19 times a day). Look at the
+  hexes when a runway end has a few arrivals that its wind does not explain.
 - Gate heights depend on how low the receiver hears; the recommendation
   covers the track, centre and width only.

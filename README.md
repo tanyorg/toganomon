@@ -158,7 +158,7 @@ With recorded traces (a day of readsb's traces or globe history),
 [`tools/tune/tune_airport.py`](tools/tune/README.md) replays them with
 toganomon's detection and recommends the entry: track, centre and gate
 width, with the arrivals, departures and go-arounds it then finds.
-**It is experimental** (tried on RJFF, RJBB and RJTT only; it may change at any time):
+**It is experimental** (tried on RJFF, RJBB, RJTT, KLAX and KJFK only; it may change at any time):
 check what it recommends by hand.
 
 For an airport not in the file, write a configuration with its reference

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recommend an airport's runway gates from recorded traffic.
 
-EXPERIMENTAL: tried on RJFF, RJBB and RJTT only; options, output and the way it
+EXPERIMENTAL: tried on RJFF, RJBB, RJTT, KLAX and KJFK only; options, output and the way it
 recommends may change at any time. Check its recommendations by hand.
 
     tools/tune/tune_airport.py ICAO TRACES [--metar ARCHIVE] [--airports FILE]
@@ -60,6 +60,11 @@ PASS_CROSS_KM = 2.0      # ... and a pass is looked for this far beside a centre
 LOW_PASS_FT = 500        # track and centre from the passes below this (and the rolls on the runway) ...
 PASS_FT = 1500           # ... or, when those are too few, below this (as --check-runways)
 MATCH_S = 120            # a replayed movement matches a logged one within this
+APPROACH_KM = 15.0       # a second approach: low on a runway's extended centreline, within
+                         # this of the runway's centre and inside its gate width ...
+APPROACH_FT = 1500       # ... at or below this above it ...
+CLIMB_BETWEEN_FT = 1000  # ... then up at least this much ...
+SECOND_WITHIN_S = 3600   # ... and low again within this, never on the ground in between
 KEEP_KM = 25.0           # points kept from each trace: within this of the ARP ...
 KEEP_FT = 6000           # ... and this far above it (or on the ground)
 
@@ -296,6 +301,73 @@ def low_without_movement(tg, docs, moves, win):
     return sorted(out)
 
 
+def second_approaches(tg, docs, win):
+    """Aircraft that came low near the airport, climbed away and came low
+    again without touching the ground in between: a go-around found another
+    way, to check detection for misses. [{"hex", "flight", "t" (lowest point
+    of the first approach), "min_ft" (above the airport), "again_t",
+    "in_gate" (the lowest point was inside a runway gate)}]. Like
+    go-arounds, not for rotorcraft or aircraft slower than min_gs_kt there
+    (helicopters around a heliport go low again and again)."""
+    out = []
+    for doc, _, _ in docs:
+        base, flight, cat = doc["timestamp"], None, None
+        low = None          # the current low stretch: [t of its lowest point, its altitude, the point]
+        peak = None         # highest since the last low stretch
+        entered_from_above = False
+        prev_alt = None
+        for p in doc["trace"]:
+            if len(p) > 8 and isinstance(p[8], dict):
+                flight = (p[8].get("flight") or "").strip() or flight
+                cat = p[8].get("category") or cat
+            t = base + p[0]
+            if p[3] == "ground":
+                low, peak, entered_from_above, prev_alt = None, None, False, None
+                continue
+            if not isinstance(p[3], (int, float)):
+                continue
+            agl = p[3] - tg.ELEVATION_FT
+            if agl <= APPROACH_FT and on_final(tg, p):
+                if low is not None and peak is not None and peak - low[1] >= CLIMB_BETWEEN_FT:
+                    slow = isinstance(low[2][4], (int, float)) and low[2][4] < tg.GA_MIN_GS_KT
+                    if (entered_from_above and t - low[0] <= SECOND_WITHIN_S and win[0] <= low[0] <= win[1]
+                            and not slow and cat not in tg.GA_EXCLUDE_CATEGORIES):
+                        out.append({"hex": doc["icao"], "flight": flight, "t": low[0], "min_ft": round(low[1]),
+                                    "again_t": t, "in_gate": in_any_gate(tg, low[2])})
+                    low, peak = None, None
+                    entered_from_above = True
+                if low is None:
+                    entered_from_above = entered_from_above or (prev_alt is not None and prev_alt > agl)
+                    low = [t, agl, p]
+                elif agl < low[1]:
+                    low = [t, agl, p]
+                peak = None
+            elif low is not None:
+                peak = agl if peak is None else max(peak, agl)
+            prev_alt = agl
+    return sorted(out, key=lambda x: x["t"])
+
+
+def on_final(tg, p):
+    """p is on a runway's extended centreline: within APPROACH_KM of its
+    centre and the gate's width across it. Not a circle around the ARP: that
+    takes in the traffic of airports nearby (LaGuardia is 13 km from JFK,
+    Hawthorne 5 km from LAX)."""
+    for rw in tg.RUNWAYS:
+        along, cross = tg.runway_frame(p[1], p[2], rw)
+        if abs(along) <= APPROACH_KM and abs(cross) <= rw["gate_cross_km"]:
+            return True
+    return False
+
+
+def in_any_gate(tg, p):
+    for rw in tg.RUNWAYS:
+        along, cross = tg.runway_frame(p[1], p[2], rw)
+        if abs(along) <= rw["gate_along_km"] and abs(cross) <= rw["gate_cross_km"]:
+            return True
+    return False
+
+
 # ---------- 4. answer ----------
 
 def read_log(path, win):
@@ -353,6 +425,13 @@ def report(icao, entry, results, new, notes, days, totals, cmp_total, n_qnh, min
                      f" {len(d['low'])} low without a movement (arr/dep: {per_end or '-'})")
     gas = [g for d in days for g in d["go_arounds"]]
     lines += [f"    go-around {iso(g['t'])} {g.get('flight') or '-'} {g['hex']} RWY{g['rwy']}" for g in gas]
+    seconds = [s for d in days for s in d["second"]]
+    missed = [s for s in seconds if not s["found"]]
+    lines.append(f"  second approaches (low, up {CLIMB_BETWEEN_FT} ft, low again): {len(seconds)},"
+                 f" {len(seconds) - len(missed)} of them found as go-arounds")
+    lines += [f"    not a go-around: {iso(s['t'])} {s['flight'] or '-'} {s['hex']} lowest {s['min_ft']} ft"
+              f" {'in a gate' if s['in_gate'] else 'outside the gates'}, low again {iso(s['again_t'])[11:]}"
+              for s in missed]
     # what the days did not show: so whoever adds the airport knows what to add
     unused = [e for rw in new["runways"] for e in rw["ends"] if not any(totals.get(e, {}).values())]
     thin = ["/".join(r["ends"]) for r in results if r["passes"] < min_passes]
@@ -419,6 +498,10 @@ def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PA
         day = {"dir": d, "label": iso(win[0])[:10], "window": win, "traces": len(docs), "counts": counts,
                "go_arounds": [g for g in tg.find_go_arounds(moves) if win[0] <= g["t"] <= win[1]],
                "low": low_without_movement(tg, docs, moves, win)}
+        # a second approach is "found" when a go-around of the same aircraft is within 10 minutes of it
+        day["second"] = [dict(s, found=any(g["hex"] == s["hex"] and abs(g["t"] - s["t"]) <= 600
+                                           for g in day["go_arounds"]))
+                         for s in second_approaches(tg, docs, win)]
         if answer:
             m, ol, orr = compare(moves, read_log(answer, win), win)
             cmp_total[0] += m
@@ -431,7 +514,9 @@ def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PA
     lines = report(icao, entry, results, new, notes, days, totals, cmp_total, len(series), min_passes)
     gas = [g for d in days for g in d["go_arounds"]]
     low = sorted({h for d in days for h in d["low"]})
+    second = [s for d in days for s in d["second"]]
     return new, lines, {"results": results, "counts": totals, "go_arounds": gas, "low": low, "days": days,
+                        "second": second,
                         "window": (days[0]["window"][0], days[-1]["window"][1])}
 
 
