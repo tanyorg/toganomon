@@ -66,6 +66,16 @@ def day(n=40, cross=0.0, skew=0.0, start=T0):
     return docs
 
 
+def single_runway_airports(d):
+    """An airports file in d with RJFF as one runway (without "members")."""
+    entry = tt.load_toganomon().load_airports()["RJFF"]
+    entry["runways"] = [{k: v for k, v in rw.items() if k != "members"} for rw in entry["runways"]]
+    path = os.path.join(d, "airports.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"airports": {"RJFF": entry}}, f)
+    return path
+
+
 class Tune(unittest.TestCase):
     def run_tune(self, docs, **kw):
         with tempfile.TemporaryDirectory() as d:
@@ -82,7 +92,9 @@ class Tune(unittest.TestCase):
         self.assertIn("80 passes below 500 ft, track 150.3 (+0.0)", lines[1])
 
     def test_offset_traffic_moves_the_centre(self):
-        new, _, res = self.run_tune(day(cross=0.4))
+        # one runway, not RJFF's group of two (a group keeps its centre)
+        with tempfile.TemporaryDirectory() as a:
+            new, _, res = self.run_tune(day(cross=0.4), airports=single_runway_airports(a))
         self.assertEqual(res["results"][0]["offset_km"], 0.4)
         # measured again against the recommended entry: on the centreline
         tg = tt.load_toganomon()
@@ -115,7 +127,28 @@ class Tune(unittest.TestCase):
         _, lines, res = self.run_tune(docs + [ga, low])
         self.assertEqual([g["hex"] for g in res["go_arounds"]], ["9a0001"])
         self.assertEqual(res["low"], ["10f001"])
-        self.assertIn("go-arounds: 1", "\n".join(lines))
+        self.assertIn("1 go-around(s)", "\n".join(lines))
+        self.assertIn("go-around ", "\n".join(lines))
+
+    def test_several_directories(self):
+        # two days, each in its own directory: passes add up, one line per day, one recommendation
+        with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+            write_traces(d1, day(n=20))
+            write_traces(d2, day(n=20, start=T0 + 86400))
+            new, lines, res = tt.tune("RJFF", [d1, d2], source="test data")
+        self.assertEqual(res["results"][0]["passes"], 80)
+        self.assertEqual(len(res["days"]), 2)
+        self.assertEqual(res["counts"], {"16": {"arr": 40, "dep": 40}})
+        text = "\n".join(lines)
+        self.assertIn("2 day(s)", text)
+        self.assertIn("not seen in use: 34", text)
+        self.assertNotIn("more data needed", text)
+        self.assertIn("on 2 days", new["checked"])
+        self.assertIn("(test data)", new["checked"])
+
+    def test_too_few_passes_says_what_to_add(self):
+        _, lines, _ = self.run_tune(day(n=5))
+        self.assertIn("more data needed: 16/34", "\n".join(lines))
 
     def test_answer_and_out(self):
         docs = day()
@@ -184,6 +217,50 @@ class Tune(unittest.TestCase):
                 for i in range(20)]
         self.assertEqual(len(tg.runway_passes({"timestamp": T0, "trace": roll}, tg.RUNWAYS[0], 500)), 1)
         self.assertEqual(tg.runway_passes({"timestamp": T0, "trace": taxi}, tg.RUNWAYS[0], 500), [])
+
+    def test_parallel_runways_keep_their_own_traffic(self):
+        # RJFF's gate split into two parallel runways 1.7 km apart, traffic on both
+        tg = tt.load_toganomon()
+        base = tg.load_airports()["RJFF"]
+        rw = {k: v for k, v in base["runways"][0].items() if k != "members"}
+        rw["gate_cross_km"] = 1.0
+        entry = dict(base, runways=[dict(rw, ends=["16L", "34R"], center=tt.shifted(rw["center"], rw["true_track"], 0.85)),
+                                    dict(rw, ends=["16R", "34L"], center=tt.shifted(rw["center"], rw["true_track"], -0.85))])
+        tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])        # the test traces are built on the one gate
+        docs = [arrival(f"a{i:05x}", T0 + 600 * i, cross=0.85 if i % 2 else -0.85) for i in range(60)]
+        with tempfile.TemporaryDirectory() as d:
+            write_traces(d, docs)
+            tt.configure(tg, "RJFF", entry)
+            res = tt.measure(tg, tt.load_docs(tg, tt.trace_files(d)))
+        self.assertEqual([r["passes"] for r in res], [30, 30])
+        self.assertEqual([r["offset_km"] for r in res], [0.0, 0.0])
+        self.assertEqual([round(r["parallel_km"], 2) for r in res], [1.7, 1.7])
+        new, notes = tt.recommend(entry, [dict(r, spread_km=1.7) for r in res])
+        self.assertEqual([g["gate_cross_km"] for g in new["runways"]], [1.0, 1.0])     # not widened into the other
+        self.assertTrue(all("parallel runway" in n for n in notes))
+
+    def test_group_keeps_its_centre(self):
+        # RJFF is a group (16L/34R and 16R/34L in one gate): the passes lean to the busier runway, the centre stays
+        base = tt.load_toganomon().load_airports()["RJFF"]
+        r = {"ends": ["16", "34"], "passes": 100, "below_ft": 500, "parallel_km": None,
+             "track": 150.3, "offset_km": 0.45, "spread_km": 0.91}
+        new, notes = tt.recommend(base, [r])
+        self.assertEqual(new["runways"][0]["center"], base["runways"][0]["center"])
+        self.assertEqual(new["runways"][0]["gate_cross_km"], 1.6)        # reaches 0.45 + 0.91 + margin
+        self.assertTrue(any("a group (16L/34R, 16R/34L): centre kept" in n for n in notes))
+
+    def test_second_approach_only_on_a_final(self):
+        # low, up 2000 ft, low again: on the extended centreline it is a second approach;
+        # 5 km beside it (another airport's traffic) it is not
+        def twice(hx, cross):
+            pts = [tm.gate_point(dt, along, cross, alt, tm.H16, 0) for dt, along, alt in
+                   ((0, 12, 3000), (60, 8, 1200), (120, 5, 500), (240, 3, 2500),
+                    (600, 12, 3000), (660, 8, 1200), (720, 5, 500))]
+            return {"icao": hx, "timestamp": T0 + 12000, "trace": pts}
+        _, lines, res = self.run_tune(day(n=31) + [twice("5ec001", 0.0), twice("5ec002", 5.0)])
+        self.assertEqual([s["hex"] for s in res["second"]], ["5ec001"])
+        self.assertFalse(res["second"][0]["found"])
+        self.assertIn("second approaches (low, up 1000 ft, low again): 1, 0 of them", "\n".join(lines))
 
     def test_trim_keeps_the_points_near_the_airport(self):
         tg = tt.load_toganomon()
