@@ -112,6 +112,12 @@ DEP_CONFIRM_FT = 200
 # and one tracked since its arrival may still carry the arriving flight's
 # callsign until the new one is broadcast.
 DEP_IDENT_S = 60
+# No arrival within this after a point on the ground: on the take-off roll
+# the baro rate can read a few hundred ft/min down while the aircraft is
+# already on the runway in the gate, and the climb after it would then
+# look like a go-around (RJBB, 2026-11-16/20, with receivers that hear the
+# ground).
+GROUND_ARR_S = 120
 # An aircraft that was a candidate (near and low) stays one this long, so its
 # trace_recent is still read after it climbed out of the candidate box: a
 # fast departure goes from the runway to above max_alt_ft between two runs.
@@ -505,15 +511,20 @@ def detect_movements(doc, alt_offset=0.0, now=None):
         return out
     pts = [p for p in doc.get("trace") or []
            if isinstance(p, list) and p and isinstance(p[0], (int, float))]
+    last_ground = None
     for i, p in enumerate(pts):
         flight = _flight(p) or flight
         cat = _category(p) or cat
+        if len(p) > 3 and p[3] == "ground":
+            last_ground = t0 + p[0]
         hit = classify_point(p, alt_offset)
         if not hit:
             continue
         if hit[0] == "dep" and not _climb_confirmed(pts, i):
             continue
         t = t0 + p[0]
+        if hit[0] == "arr" and last_ground is not None and t - last_ground <= GROUND_ARR_S:
+            continue
         if t - last.get(hit[0], -1e18) < DEDUP_S:
             continue
         ident_flight, ident_cat = flight, cat

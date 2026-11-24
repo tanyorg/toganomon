@@ -172,6 +172,25 @@ class Movements(unittest.TestCase):
         self.assertEqual([e[1:3] for e in cs.detect_movements(doc)], [("dep", "16")])
         self.assertEqual(cs.detect_movements(doc)[0][0], T0)
 
+    def test_take_off_roll_is_no_arrival(self):
+        # on the runway: "ground", then baro altitude reading a little down while accelerating
+        roll = [[float(i), *gate_point(0, -1.5 + 0.1 * i, 0.0, "ground", H16, 0)[1:3], "ground", 100.0, H16]
+                for i in range(5)]
+        roll += [gate_point(10 + i, -1.0 + 0.2 * i, 0.0, -225, H16, -320) for i in range(5)]
+        climb = pass_trace(0, 0.0, 5.0, -200, 900, H16, 2400)
+        doc = {"icao": "86e7e6", "timestamp": T0,
+               "trace": roll + [[p[0] + 20] + p[1:] for p in climb["trace"]]}
+        self.assertEqual([e[1] for e in cs.detect_movements(doc)], ["dep"])
+
+    def test_touch_and_go_still_a_go_around(self):
+        # descending to the runway (arrival), a "ground" point, then the climb: arrival came first
+        arr = pass_trace(0, 5, 0, 900, -100, H16, -700)
+        dep = pass_trace(0, 0, 5, -100, 900, H16, 2400)
+        trace = arr["trace"] + [[100.0] + arr["trace"][-1][1:3] + ["ground"]] \
+            + [[p[0] + 110] + p[1:] for p in dep["trace"]]
+        doc = {"icao": "71c398", "timestamp": T0, "trace": trace}
+        self.assertEqual([e[1] for e in cs.detect_movements(doc)], ["arr", "dep"])
+
     def test_departure_callsign_from_just_after_the_pass(self):
         def with_ident(p, flight, cat):
             p[8] = {"flight": flight, "category": cat}
