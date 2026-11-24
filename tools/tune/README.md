@@ -1,8 +1,8 @@
 # Tuning an airport's gates from recorded traffic
 
 > [!WARNING]
-> **Experimental.** This tool is new and has been tried on one airport
-> (RJFF) only. Its options, its output and the way it recommends a gate
+> **Experimental.** This tool is new and has been tried on two airports
+> (RJFF with one receiver, RJBB with adsb.lol data) only. Its options, its output and the way it recommends a gate
 > may change without notice, also in a patch release. Check every
 > recommendation by hand before it goes into `airports.json`.
 
@@ -34,17 +34,20 @@ lags the live traffic).
 
 ```
 RJFF: 917 traces, window 2026-11-23T03:09:14Z .. 2026-11-24T02:58:48Z, QNH from 190 METARs
-  16/34: 327 passes, track 150.4 (+0.1), offset -0.11 km, spread 0.20 km -> true_track 150.4, gate_cross_km 1.1
-  note: 16/34: traffic spreads 0.2 km; the 1.1 km gate could be narrower
+  16/34: 215 passes below 500 ft, track 150.3 (+0.0), offset -0.12 km, spread 0.01 km -> true_track 150.3, gate_cross_km 1.1
+  note: 16/34: traffic spreads 0.01 km; the 1.1 km gate could be narrower
   replay: 201 arrivals, 211 departures (arr/dep per end: 16 184/184, 34 17/27)
   go-arounds: 0
   low near the airport without a movement: 2 (71c525 8413bd)
   answer: 412 matched, 3 only in the log, 0 only in the replay
 ```
 
-- **passes / track / offset**: as `toganomon.py --check-runways`: the
-  aircraft low and straight along the gate, their median true track and how
-  far right (+) of the gate's centre line they fly.
+- **passes / track / offset**: the aircraft low and straight along the
+  gate, their median true track and how far right (+) of the gate's centre
+  line they fly. Measured on the passes below 500 ft and the take-off and
+  landing rolls (the runway itself: higher up, a departure may already be
+  turning); with a receiver that does not hear that low, on the passes
+  below 1500 ft as `toganomon.py --check-runways` does.
 - **spread**: 95% of the passes are this close to the median offset. A gate
   narrower than spread + 0.2 km is widened; a much wider one is only noted
   (a group of parallel runways needs its width).

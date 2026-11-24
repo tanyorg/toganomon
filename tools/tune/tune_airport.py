@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recommend an airport's runway gates from recorded traffic.
 
-EXPERIMENTAL: tried on RJFF only; options, output and the way it
+EXPERIMENTAL: tried on RJFF and RJBB only; options, output and the way it
 recommends may change at any time. Check its recommendations by hand.
 
     tools/tune/tune_airport.py ICAO TRACES [--metar ARCHIVE] [--airports FILE]
@@ -54,7 +54,11 @@ WINDOW_TAIL_S = 600      # trace_full lags the live traffic by minutes
 LOW_KM = 8.0             # "low near the airport": within this of the ARP ...
 LOW_FT = 1500            # ... and this far above it
 CROSS_MARGIN_KM = 0.2    # gate half-width beyond the spread of the passes
+LOW_PASS_FT = 500        # track and centre from the passes below this (and the rolls on the runway) ...
+PASS_FT = 1500           # ... or, when those are too few, below this (as --check-runways)
 MATCH_S = 120            # a replayed movement matches a logged one within this
+KEEP_KM = 25.0           # points kept from each trace: within this of the ARP ...
+KEEP_FT = 6000           # ... and this far above it (or on the ground)
 
 
 def load_toganomon(path=None):
@@ -104,15 +108,45 @@ def qnh_at(series, t):
     return series[i][1] if i >= 0 else None
 
 
+def trim(tg, trace):
+    """The points of a trace near the airport (KEEP_KM, KEEP_FT): all that
+    detection, gates and the low-aircraft check look at. A point's details
+    (callsign, category: index 8) are carried to the next kept point, since
+    readsb sends them only now and then."""
+    out, details = [], None
+    for p in trace:
+        if not (isinstance(p, list) and len(p) > 3):
+            continue
+        if len(p) > 8 and isinstance(p[8], dict):
+            details = dict(details or {}, **p[8])
+        lat, lon, alt = p[1], p[2], p[3]
+        if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float))):
+            continue
+        if not (alt == "ground" or (isinstance(alt, (int, float)) and alt - tg.ELEVATION_FT <= KEEP_FT)):
+            continue
+        if tg.arp_distance_km(lat, lon) > KEEP_KM:
+            continue
+        if details is not None:
+            q = list(p) + [None] * (9 - len(p))
+            q[8] = dict(details, **(p[8] if len(p) > 8 and isinstance(p[8], dict) else {}))
+            p, details = q, None
+        out.append(p)
+    return out
+
+
 def load_docs(tg, paths):
-    """[(doc, first time, last time)] of the traces with points."""
+    """[(doc, first time, last time)]: each trace with only its points near
+    the airport (trim; a day of a busy region would not fit in memory
+    otherwise), and the times of its first and last point of all."""
     out = []
     for p in paths:
         doc = tg.load_trace(p)
         tr = doc.get("trace") if isinstance(doc, dict) else None
         if not tr or not isinstance(doc.get("timestamp"), (int, float)) or not isinstance(doc.get("icao"), str):
             continue
-        out.append((doc, doc["timestamp"] + tr[0][0], doc["timestamp"] + tr[-1][0]))
+        t0, t1 = doc["timestamp"] + tr[0][0], doc["timestamp"] + tr[-1][0]
+        kept = trim(tg, tr)
+        out.append(({"icao": doc["icao"], "timestamp": doc["timestamp"], "trace": kept}, t0, t1))
     return out
 
 
@@ -122,15 +156,24 @@ def configure(tg, icao, entry):
 
 # ---------- 1. measure ----------
 
-def measure(tg, docs):
-    """Per configured runway: {"ends", "passes", "track", "offset_km",
-    "spread_km" (95% of the passes are this close to the median offset)}."""
+def measure(tg, docs, min_passes=MIN_PASSES):
+    """Per configured runway: {"ends", "passes", "below_ft", "track",
+    "offset_km", "spread_km" (95% of the passes are this close to the
+    median offset)}. Passes low over the runway first (LOW_PASS_FT and the
+    take-off and landing rolls): higher up a departure may already turn
+    (RJBB 06L/24R, departures only, measured 41 and 56 degrees on two days
+    with passes up to 1500 ft; the runway is at 51). With a receiver that
+    does not hear that low, the passes up to PASS_FT."""
     out = []
     for rw in tg.RUNWAYS:
-        passes = []
-        for doc, _, _ in docs:
-            passes.extend(tg.runway_passes(doc, rw))
-        r = {"ends": list(rw["ends"]), "passes": len(passes), "track": None, "offset_km": None, "spread_km": None}
+        for below in (LOW_PASS_FT, PASS_FT):
+            passes = []
+            for doc, _, _ in docs:
+                passes.extend(tg.runway_passes(doc, rw, below))
+            if len(passes) >= min_passes:
+                break
+        r = {"ends": list(rw["ends"]), "passes": len(passes), "below_ft": below,
+             "track": None, "offset_km": None, "spread_km": None}
         if passes:
             ref = rw["true_track"]
             r["track"] = round((ref + statistics.median((tr - ref + 180.0) % 360.0 - 180.0
@@ -261,7 +304,7 @@ def report(icao, entry, results, new, notes, counts, gas, low, cmp_result, win, 
             lines.append(f"  {name}: no pass through the gate")
             continue
         diff = (r["track"] - rw["true_track"] + 180.0) % 360.0 - 180.0
-        lines.append(f"  {name}: {r['passes']} passes, track {r['track']:.1f} ({diff:+.1f}), "
+        lines.append(f"  {name}: {r['passes']} passes below {r['below_ft']} ft, track {r['track']:.1f} ({diff:+.1f}), "
                      f"offset {r['offset_km']:+.2f} km, spread {r['spread_km']:.2f} km"
                      f" -> true_track {nrw['true_track']}, gate_cross_km {nrw.get('gate_cross_km', 1.0)}")
     lines += [f"  note: {n}" for n in notes]
@@ -293,7 +336,7 @@ def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PA
         raise SystemExit(f"no trace_full_*.json with points under {traces}")
     series = qnh_series(tg, metar)
     win = window(docs)
-    results = measure(tg, docs)
+    results = measure(tg, docs, min_passes)
     new, notes = recommend(entry, results, min_passes)
     configure(tg, icao, new)
     moves = replay(tg, docs, series)

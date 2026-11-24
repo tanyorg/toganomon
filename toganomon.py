@@ -112,6 +112,12 @@ DEP_CONFIRM_FT = 200
 # and one tracked since its arrival may still carry the arriving flight's
 # callsign until the new one is broadcast.
 DEP_IDENT_S = 60
+# No arrival within this after a point on the ground: on the take-off roll
+# the baro rate can read a few hundred ft/min down while the aircraft is
+# already on the runway in the gate, and the climb after it would then
+# look like a go-around (RJBB, 2026-11-16/20, with receivers that hear the
+# ground).
+GROUND_ARR_S = 120
 # An aircraft that was a candidate (near and low) stays one this long, so its
 # trace_recent is still read after it climbed out of the candidate box: a
 # fast departure goes from the runway to above max_alt_ft between two runs.
@@ -505,15 +511,20 @@ def detect_movements(doc, alt_offset=0.0, now=None):
         return out
     pts = [p for p in doc.get("trace") or []
            if isinstance(p, list) and p and isinstance(p[0], (int, float))]
+    last_ground = None
     for i, p in enumerate(pts):
         flight = _flight(p) or flight
         cat = _category(p) or cat
+        if len(p) > 3 and p[3] == "ground":
+            last_ground = t0 + p[0]
         hit = classify_point(p, alt_offset)
         if not hit:
             continue
         if hit[0] == "dep" and not _climb_confirmed(pts, i):
             continue
         t = t0 + p[0]
+        if hit[0] == "arr" and last_ground is not None and t - last_ground <= GROUND_ARR_S:
+            continue
         if t - last.get(hit[0], -1e18) < DEDUP_S:
             continue
         ident_flight, ident_cat = flight, cat
@@ -598,9 +609,12 @@ CHECK_OK_DEG = 1.0
 CHECK_OK_KM = 0.2
 
 
-def runway_passes(doc, rw):
+def runway_passes(doc, rw, max_alt_ft=None):
     """[(true track folded to the first end, mean cross km)] of doc's passes
-    through rw's gate."""
+    through rw's gate, below max_alt_ft above the airport (default
+    CHECK_ALT_FT). A point on the ground at take-off or landing speed counts
+    as at the airport's elevation: the roll is the runway itself."""
+    max_alt_ft = CHECK_ALT_FT if max_alt_ft is None else max_alt_ft
     base = doc.get("timestamp") if isinstance(doc, dict) else None
     trace = doc.get("trace") if isinstance(doc, dict) else None
     if not isinstance(base, (int, float)) or not isinstance(trace, list):
@@ -610,11 +624,13 @@ def runway_passes(doc, rw):
         if not (isinstance(p, list) and len(p) > 3):
             continue
         t, lat, lon, alt = p[0], p[1], p[2], p[3]
+        if alt == "ground" and len(p) > 4 and isinstance(p[4], (int, float)) and p[4] >= GA_MIN_GS_KT:
+            alt = ELEVATION_FT
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (t, lat, lon, alt)):
             continue
         along, cross = runway_frame(lat, lon, rw)
         inside = (abs(along) <= rw["gate_along_km"] and abs(cross) <= CHECK_CROSS_KM
-                  and alt - ELEVATION_FT <= CHECK_ALT_FT)
+                  and alt - ELEVATION_FT <= max_alt_ft)
         if not inside or (last_t is not None and t - last_t > CHECK_GAP_S):
             if len(run) >= CHECK_MIN_POINTS:
                 runs.append(run)
