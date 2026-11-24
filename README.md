@@ -58,8 +58,16 @@ vi .env                        # airport, receiver position, Beast source, port
 docker compose up -d --build
 ```
 
-Then open `http://<host>:8080/` (`WEB_PORT`). The console has no login:
-keep it on your LAN (or behind a VPN), not open to the internet.
+Then open `http://<host>:8080/` (`WEB_PORT`).
+
+> [!WARNING]
+> **Do not expose the console to the internet.** It has no login, and the
+> tar1090 map it includes shows **where your receiver is**: the site
+> marker, range rings and every aircraft's distance from it, i.e. roughly
+> where you live. Keep it on your LAN, or reach it over a VPN. Do not
+> forward `WEB_PORT` on your router, and do not count on a host firewall
+> (ufw, firewalld) to close it: Docker publishes ports through its own
+> iptables rules, which bypass them.
 
 This starts three containers:
 
@@ -172,7 +180,7 @@ go-around window, candidate radius, paths) is described in
 
 ```sh
 cd toganomon && git pull
-cd docker && docker compose up -d --build
+cd docker && docker compose pull && docker compose up -d --build
 ```
 
 That follows `main`. To stay on a release instead, check out its tag
@@ -182,10 +190,12 @@ Until 1.0, a new minor version (0.2.0) may change the detection or the JSON
 output; a patch (0.1.1) only fixes bugs.
 
 The go-around history and the state are on the `toganomon-state` volume and
-survive updates. The images are pinned to the versions this was tested
-with: ultrafeeder `latest-build-993` and nginx `1.27.5-alpine` (the worker
-uses `python:3.13-alpine`, which gets fixes on every build). To try a newer
-ultrafeeder, change its tag in `docker/compose.yaml`.
+survive updates. ultrafeeder is pinned to the build this was tested with
+(`latest-build-993`): toganomon reads files inside it (the traces and
+tar1090-db), so a newer build is tried before its tag is raised here. To
+try one yourself, change its tag in `docker/compose.yaml`. nginx
+(`stable-alpine`) and the worker's Python (`3.13-alpine`) follow their
+fixes; `docker compose pull` before `up -d --build` fetches them.
 
 ## Without Docker
 

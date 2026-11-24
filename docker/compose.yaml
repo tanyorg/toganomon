@@ -51,7 +51,7 @@ services:
       # - ./toganomon.toml:/etc/toganomon.toml:ro   # your own configuration
 
   web:
-    image: nginx:1.27.5-alpine
+    image: nginx:stable-alpine           # static files and one proxy: follows fixes
     container_name: toganomon-web
     restart: unless-stopped
     depends_on: [ultrafeeder, toganomon]
