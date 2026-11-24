@@ -1,8 +1,8 @@
 # Tuning an airport's gates from recorded traffic
 
 > [!WARNING]
-> **Experimental.** This tool is new and has been tried on two airports
-> (RJFF with one receiver, RJBB with adsb.lol data) only. Its options, its output and the way it recommends a gate
+> **Experimental.** This tool is new and has been tried on three airports
+> only (RJFF with one receiver, RJBB and RJTT with adsb.lol data). Its options, its output and the way it recommends a gate
 > may change without notice, also in a patch release. Check every
 > recommendation by hand before it goes into `airports.json`.
 
@@ -50,7 +50,9 @@ RJFF: 917 traces, window 2026-11-23T03:09:14Z .. 2026-11-24T02:58:48Z, QNH from 
   below 1500 ft as `toganomon.py --check-runways` does.
 - **spread**: 95% of the passes are this close to the median offset. A gate
   narrower than spread + 0.2 km is widened; a much wider one is only noted
-  (a group of parallel runways needs its width).
+  (a group of parallel runways needs its width). Beside a parallel runway
+  (within 5 degrees) passes are only looked for up to half way to it, and
+  the gate is never widened beyond that.
 - **->**: the recommendation, from the gates with enough passes.
 - **replay**: arrivals and departures per runway end with the recommended
   entry. Arrivals and departures should roughly balance over a day.

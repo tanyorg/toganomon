@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recommend an airport's runway gates from recorded traffic.
 
-EXPERIMENTAL: tried on RJFF and RJBB only; options, output and the way it
+EXPERIMENTAL: tried on RJFF, RJBB and RJTT only; options, output and the way it
 recommends may change at any time. Check its recommendations by hand.
 
     tools/tune/tune_airport.py ICAO TRACES [--metar ARCHIVE] [--airports FILE]
@@ -54,6 +54,9 @@ WINDOW_TAIL_S = 600      # trace_full lags the live traffic by minutes
 LOW_KM = 8.0             # "low near the airport": within this of the ARP ...
 LOW_FT = 1500            # ... and this far above it
 CROSS_MARGIN_KM = 0.2    # gate half-width beyond the spread of the passes
+PARALLEL_DEG = 5.0       # runways this close in track are parallel ...
+PASS_CROSS_KM = 2.0      # ... and a pass is looked for this far beside a centreline,
+                         # or up to half way to a parallel one
 LOW_PASS_FT = 500        # track and centre from the passes below this (and the rolls on the runway) ...
 PASS_FT = 1500           # ... or, when those are too few, below this (as --check-runways)
 MATCH_S = 120            # a replayed movement matches a logged one within this
@@ -156,6 +159,20 @@ def configure(tg, icao, entry):
 
 # ---------- 1. measure ----------
 
+def parallel_km(tg, rw):
+    """Distance from rw's centreline to the nearest parallel runway's, or None."""
+    out = None
+    for other in tg.RUNWAYS:
+        if other is rw:
+            continue
+        d = abs((other["true_track"] - rw["true_track"] + 90.0) % 180.0 - 90.0)
+        if d > PARALLEL_DEG:
+            continue
+        cross = abs(tg.runway_frame(other["lat"], other["lon"], rw)[1])
+        out = cross if out is None else min(out, cross)
+    return out
+
+
 def measure(tg, docs, min_passes=MIN_PASSES):
     """Per configured runway: {"ends", "passes", "below_ft", "track",
     "offset_km", "spread_km" (95% of the passes are this close to the
@@ -166,13 +183,15 @@ def measure(tg, docs, min_passes=MIN_PASSES):
     does not hear that low, the passes up to PASS_FT."""
     out = []
     for rw in tg.RUNWAYS:
+        par = parallel_km(tg, rw)
+        cross_km = PASS_CROSS_KM if par is None else min(PASS_CROSS_KM, par / 2.0)
         for below in (LOW_PASS_FT, PASS_FT):
             passes = []
             for doc, _, _ in docs:
-                passes.extend(tg.runway_passes(doc, rw, below))
+                passes.extend(tg.runway_passes(doc, rw, below, cross_km))
             if len(passes) >= min_passes:
                 break
-        r = {"ends": list(rw["ends"]), "passes": len(passes), "below_ft": below,
+        r = {"ends": list(rw["ends"]), "passes": len(passes), "below_ft": below, "parallel_km": par,
              "track": None, "offset_km": None, "spread_km": None}
         if passes:
             ref = rw["true_track"]
@@ -210,7 +229,11 @@ def recommend(entry, results, min_passes=MIN_PASSES):
         rw["center"] = [round(v, 6) for v in shifted(rw["center"], old_track, r["offset_km"])]
         need = round(math.ceil((r["spread_km"] + CROSS_MARGIN_KM) * 10) / 10, 1)
         width = rw.get("gate_cross_km", 1.0)
-        if need > width:
+        par = r.get("parallel_km")
+        if par is not None and need > par / 2.0:
+            notes.append(f"{name}: traffic spreads {r['spread_km']} km, but the parallel runway is "
+                         f"{par:.2f} km away: gate kept at {width} km")
+        elif need > width:
             rw["gate_cross_km"] = need
             notes.append(f"{name}: gate widened {width} -> {need} km (spread {r['spread_km']} km)")
         elif need + 0.3 <= width:

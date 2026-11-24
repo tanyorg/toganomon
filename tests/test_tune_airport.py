@@ -185,6 +185,26 @@ class Tune(unittest.TestCase):
         self.assertEqual(len(tg.runway_passes({"timestamp": T0, "trace": roll}, tg.RUNWAYS[0], 500)), 1)
         self.assertEqual(tg.runway_passes({"timestamp": T0, "trace": taxi}, tg.RUNWAYS[0], 500), [])
 
+    def test_parallel_runways_keep_their_own_traffic(self):
+        # RJFF's gate split into two parallel runways 1.7 km apart, traffic on both
+        tg = tt.load_toganomon()
+        base = tg.load_airports()["RJFF"]
+        rw = dict(base["runways"][0], gate_cross_km=1.0)
+        entry = dict(base, runways=[dict(rw, ends=["16L", "34R"], center=tt.shifted(rw["center"], rw["true_track"], 0.85)),
+                                    dict(rw, ends=["16R", "34L"], center=tt.shifted(rw["center"], rw["true_track"], -0.85))])
+        tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])        # the test traces are built on the one gate
+        docs = [arrival(f"a{i:05x}", T0 + 600 * i, cross=0.85 if i % 2 else -0.85) for i in range(60)]
+        with tempfile.TemporaryDirectory() as d:
+            write_traces(d, docs)
+            tt.configure(tg, "RJFF", entry)
+            res = tt.measure(tg, tt.load_docs(tg, tt.trace_files(d)))
+        self.assertEqual([r["passes"] for r in res], [30, 30])
+        self.assertEqual([r["offset_km"] for r in res], [0.0, 0.0])
+        self.assertEqual([round(r["parallel_km"], 2) for r in res], [1.7, 1.7])
+        new, notes = tt.recommend(entry, [dict(r, spread_km=1.7) for r in res])
+        self.assertEqual([g["gate_cross_km"] for g in new["runways"]], [1.0, 1.0])     # not widened into the other
+        self.assertTrue(all("parallel runway" in n for n in notes))
+
     def test_trim_keeps_the_points_near_the_airport(self):
         tg = tt.load_toganomon()
         tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])
