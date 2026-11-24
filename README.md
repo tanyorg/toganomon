@@ -35,7 +35,11 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
   - **MOVEMENTS**: the arrivals and departures of the last 24 hours with
     callsign, type and registration; a row shows that flight's track on
     the map, a G/A mark opens its go-around.
-  - METAR and TAF in the header, UTC and local clocks.
+  - METAR and TAF in the header with the METAR's age (amber after 90
+    minutes, red after 180) and an expired TAF marked; UTC and local
+    clocks.
+  - A chime when a new go-around appears (after the first click on the
+    page, as browsers require; `?chime=0` turns it off).
 
 It reads [readsb](https://github.com/wiedehopf/readsb)'s per-aircraft
 traces; it does not decode radio itself.

@@ -36,7 +36,10 @@ header {
 .wx-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
 .wx-label { flex: none; width: 3.5em; color: var(--dim); }
 .wx-text { overflow: hidden; text-overflow: ellipsis; }
-.wx-text.stale { color: #f85149; }
+.wx-age { flex: none; min-width: 3.5em; color: var(--ok); font-variant-numeric: tabular-nums; }
+.wx-age:empty { display: none; }
+.stale-warn { color: #e3b341; }
+.stale-alert { color: #f85149; }
 .clocks { display: flex; gap: 12px; }
 .clock { display: flex; flex-direction: column; align-items: flex-end; }
 .clock-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 0.08em; }
