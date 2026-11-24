@@ -154,6 +154,17 @@ class Tune(unittest.TestCase):
         self.assertEqual(tt.qnh_at(s, t), 1016)
         self.assertIsNone(tt.qnh_at(s, t - 86400))
 
+    def test_trim_keeps_the_points_near_the_airport(self):
+        tg = tt.load_toganomon()
+        tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])
+        near = tm.gate_point(10, 2.0, 0.0, 800, 150, -700)
+        trace = [[0, 35.5, 132.0, 30000, 450, 90, 0, 0, {"flight": "ABC123  ", "category": "A3"}],   # far, details
+                 near, [20, 33.6, 130.45, 9000, 300, 90, 0, 0, None], [30, 33.59, 130.45, "ground"]]
+        kept = tt.trim(tg, trace)
+        self.assertEqual([p[0] for p in kept], [10, 30])
+        self.assertEqual(kept[0][8], {"flight": "ABC123  ", "category": "A3"})   # carried over
+        self.assertEqual(len(kept[1]), 4)
+
     def test_shifted_is_runway_frame_cross(self):
         tg = tt.load_toganomon()
         tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])

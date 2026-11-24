@@ -55,6 +55,8 @@ LOW_KM = 8.0             # "low near the airport": within this of the ARP ...
 LOW_FT = 1500            # ... and this far above it
 CROSS_MARGIN_KM = 0.2    # gate half-width beyond the spread of the passes
 MATCH_S = 120            # a replayed movement matches a logged one within this
+KEEP_KM = 25.0           # points kept from each trace: within this of the ARP ...
+KEEP_FT = 6000           # ... and this far above it (or on the ground)
 
 
 def load_toganomon(path=None):
@@ -104,15 +106,45 @@ def qnh_at(series, t):
     return series[i][1] if i >= 0 else None
 
 
+def trim(tg, trace):
+    """The points of a trace near the airport (KEEP_KM, KEEP_FT): all that
+    detection, gates and the low-aircraft check look at. A point's details
+    (callsign, category: index 8) are carried to the next kept point, since
+    readsb sends them only now and then."""
+    out, details = [], None
+    for p in trace:
+        if not (isinstance(p, list) and len(p) > 3):
+            continue
+        if len(p) > 8 and isinstance(p[8], dict):
+            details = dict(details or {}, **p[8])
+        lat, lon, alt = p[1], p[2], p[3]
+        if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float))):
+            continue
+        if not (alt == "ground" or (isinstance(alt, (int, float)) and alt - tg.ELEVATION_FT <= KEEP_FT)):
+            continue
+        if tg.arp_distance_km(lat, lon) > KEEP_KM:
+            continue
+        if details is not None:
+            q = list(p) + [None] * (9 - len(p))
+            q[8] = dict(details, **(p[8] if len(p) > 8 and isinstance(p[8], dict) else {}))
+            p, details = q, None
+        out.append(p)
+    return out
+
+
 def load_docs(tg, paths):
-    """[(doc, first time, last time)] of the traces with points."""
+    """[(doc, first time, last time)]: each trace with only its points near
+    the airport (trim; a day of a busy region would not fit in memory
+    otherwise), and the times of its first and last point of all."""
     out = []
     for p in paths:
         doc = tg.load_trace(p)
         tr = doc.get("trace") if isinstance(doc, dict) else None
         if not tr or not isinstance(doc.get("timestamp"), (int, float)) or not isinstance(doc.get("icao"), str):
             continue
-        out.append((doc, doc["timestamp"] + tr[0][0], doc["timestamp"] + tr[-1][0]))
+        t0, t1 = doc["timestamp"] + tr[0][0], doc["timestamp"] + tr[-1][0]
+        kept = trim(tg, tr)
+        out.append(({"icao": doc["icao"], "timestamp": doc["timestamp"], "trace": kept}, t0, t1))
     return out
 
 
