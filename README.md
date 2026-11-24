@@ -154,6 +154,11 @@ welcome as pull requests:
    OK or CHECK.
 3. Put the result of the check in the entry's `checked`.
 
+With recorded traces (a day of readsb's traces or globe history),
+[`tools/tune/tune_airport.py`](tools/tune/README.md) replays them with
+toganomon's detection and recommends the entry: track, centre and gate
+width, with the arrivals, departures and go-arounds it then finds.
+
 For an airport not in the file, write a configuration with its reference
 point, elevation and runways as in [`examples/rjff.toml`](examples/rjff.toml)
 and mount it at `/etc/toganomon.toml` (the commented line in
