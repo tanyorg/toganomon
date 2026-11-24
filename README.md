@@ -180,7 +180,7 @@ go-around window, candidate radius, paths) is described in
 
 ```sh
 cd toganomon && git pull
-cd docker && docker compose pull && docker compose up -d --build
+cd docker && docker compose pull --ignore-buildable && docker compose up -d --build
 ```
 
 That follows `main`. To stay on a release instead, check out its tag
@@ -195,7 +195,8 @@ survive updates. ultrafeeder is pinned to the build this was tested with
 tar1090-db), so a newer build is tried before its tag is raised here. To
 try one yourself, change its tag in `docker/compose.yaml`. nginx
 (`stable-alpine`) and the worker's Python (`3.13-alpine`) follow their
-fixes; `docker compose pull` before `up -d --build` fetches them.
+fixes; `docker compose pull --ignore-buildable` (the worker is built here,
+not pulled) fetches them.
 
 ## Without Docker
 
