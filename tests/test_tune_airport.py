@@ -79,7 +79,7 @@ class Tune(unittest.TestCase):
         self.assertEqual(new["runways"][0]["true_track"], 150.3)
         self.assertEqual(res["counts"], {"16": {"arr": 40, "dep": 40}})
         self.assertEqual(res["go_arounds"], [])
-        self.assertIn("80 passes, track 150.3 (+0.0)", lines[1])
+        self.assertIn("80 passes below 500 ft, track 150.3 (+0.0)", lines[1])
 
     def test_offset_traffic_moves_the_centre(self):
         new, _, res = self.run_tune(day(cross=0.4))
@@ -153,6 +153,37 @@ class Tune(unittest.TestCase):
         t = tt.parse_iso("2026-11-20T05:00:00Z")
         self.assertEqual(tt.qnh_at(s, t), 1016)
         self.assertIsNone(tt.qnh_at(s, t - 86400))
+
+    def test_turning_departures_do_not_bend_the_track(self):
+        # departures that turn 25 degrees once above 600 ft: measured on the low part
+        docs = day()
+        for i in range(1, 80, 2):
+            doc = docs[i]
+            for p in doc["trace"]:
+                along, c = tm.cs.runway_frame(p[1], p[2])
+                if p[3] > 600:
+                    q = tm.gate_point(p[0], along, c + (along - 2.0) * math.tan(math.radians(25)), p[3], p[5], p[7])
+                    p[1], p[2] = q[1], q[2]
+        _, _, res = self.run_tune(docs)
+        r, = res["results"]
+        self.assertEqual((r["below_ft"], r["track"]), (500, 150.3))
+
+    def test_receiver_that_does_not_hear_low_falls_back(self):
+        docs = [d if not d["icao"].startswith(("a", "d")) else
+                dict(d, trace=[p for p in d["trace"] if p[3] > 520]) for d in day()]
+        _, lines, res = self.run_tune(docs)
+        self.assertEqual(res["results"][0]["below_ft"], 1500)
+        self.assertIn("below 1500 ft", lines[1])
+
+    def test_ground_roll_is_a_pass(self):
+        tg = tt.load_toganomon()
+        tt.configure(tg, "RJFF", tg.load_airports()["RJFF"])
+        roll = [[float(i), *tm.gate_point(0, -1.0 + 0.15 * i, 0.0, 0, tm.H16, 0)[1:3], "ground", 100.0 + i, tm.H16]
+                for i in range(20)]
+        taxi = [[float(i), *tm.gate_point(0, -1.0 + 0.15 * i, 0.0, 0, tm.H16, 0)[1:3], "ground", 20.0, tm.H16]
+                for i in range(20)]
+        self.assertEqual(len(tg.runway_passes({"timestamp": T0, "trace": roll}, tg.RUNWAYS[0], 500)), 1)
+        self.assertEqual(tg.runway_passes({"timestamp": T0, "trace": taxi}, tg.RUNWAYS[0], 500), [])
 
     def test_trim_keeps_the_points_near_the_airport(self):
         tg = tt.load_toganomon()
