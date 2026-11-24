@@ -1,5 +1,11 @@
 # Tuning an airport's gates from recorded traffic
 
+> [!WARNING]
+> **Experimental.** This tool is new and has been tried on one airport
+> (RJFF) only. Its options, its output and the way it recommends a gate
+> may change without notice, also in a patch release. Check every
+> recommendation by hand before it goes into `airports.json`.
+
 `tune_airport.py` replays recorded readsb traces with toganomon's own
 detection and recommends the airport's `airports.json` entry: the true
 track and centre of each runway gate, and its width. It is a tool for

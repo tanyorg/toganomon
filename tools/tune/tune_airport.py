@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Recommend an airport's runway gates from recorded traffic.
 
+EXPERIMENTAL: tried on RJFF only; options, output and the way it
+recommends may change at any time. Check its recommendations by hand.
+
     tools/tune/tune_airport.py ICAO TRACES [--metar ARCHIVE] [--airports FILE]
                                [--answer MOVEMENTS_LOG] [--out ENTRY.json]
 
