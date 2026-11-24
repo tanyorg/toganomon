@@ -173,26 +173,34 @@ def parallel_km(tg, rw):
     return out
 
 
-def measure(tg, docs, min_passes=MIN_PASSES):
-    """Per configured runway: {"ends", "passes", "below_ft", "track",
-    "offset_km", "spread_km" (95% of the passes are this close to the
-    median offset)}. Passes low over the runway first (LOW_PASS_FT and the
-    take-off and landing rolls): higher up a departure may already turn
-    (RJBB 06L/24R, departures only, measured 41 and 56 degrees on two days
-    with passes up to 1500 ft; the runway is at 51). With a receiver that
-    does not hear that low, the passes up to PASS_FT."""
-    out = []
-    for rw in tg.RUNWAYS:
+def collect_passes(tg, docs, into=None):
+    """Add docs' passes to into ([{below_ft: [(track, cross)]} per configured
+    runway]) and return it: the low ones (LOW_PASS_FT and the take-off and
+    landing rolls) and up to PASS_FT. Beside a parallel runway only up to
+    half way to it."""
+    into = into or [{LOW_PASS_FT: [], PASS_FT: []} for _ in tg.RUNWAYS]
+    for rw, acc in zip(tg.RUNWAYS, into):
         par = parallel_km(tg, rw)
         cross_km = PASS_CROSS_KM if par is None else min(PASS_CROSS_KM, par / 2.0)
         for below in (LOW_PASS_FT, PASS_FT):
-            passes = []
             for doc, _, _ in docs:
-                passes.extend(tg.runway_passes(doc, rw, below, cross_km))
-            if len(passes) >= min_passes:
-                break
-        r = {"ends": list(rw["ends"]), "passes": len(passes), "below_ft": below, "parallel_km": par,
-             "track": None, "offset_km": None, "spread_km": None}
+                acc[below].extend(tg.runway_passes(doc, rw, below, cross_km))
+    return into
+
+
+def summarize(tg, collected, min_passes=MIN_PASSES):
+    """Per configured runway: {"ends", "passes", "below_ft", "parallel_km",
+    "track", "offset_km", "spread_km" (95% of the passes are this close to
+    the median offset)}. From the low passes when there are enough: higher
+    up a departure may already turn (RJBB 06L/24R, departures only, measured
+    41 and 56 degrees on two days with passes up to 1500 ft; the runway is
+    at 51). With a receiver that does not hear that low, up to PASS_FT."""
+    out = []
+    for rw, acc in zip(tg.RUNWAYS, collected):
+        below = LOW_PASS_FT if len(acc[LOW_PASS_FT]) >= min_passes else PASS_FT
+        passes = acc[below]
+        r = {"ends": list(rw["ends"]), "passes": len(passes), "below_ft": below,
+             "parallel_km": parallel_km(tg, rw), "track": None, "offset_km": None, "spread_km": None}
         if passes:
             ref = rw["true_track"]
             r["track"] = round((ref + statistics.median((tr - ref + 180.0) % 360.0 - 180.0
@@ -202,6 +210,11 @@ def measure(tg, docs, min_passes=MIN_PASSES):
             r["spread_km"] = round(dev[min(len(dev) - 1, int(0.95 * len(dev)))], 2)
         out.append(r)
     return out
+
+
+def measure(tg, docs, min_passes=MIN_PASSES):
+    """summarize(collect_passes(docs)): one set of traces."""
+    return summarize(tg, collect_passes(tg, docs), min_passes)
 
 
 # ---------- 2. recommend ----------
@@ -318,8 +331,9 @@ def compare(moves, logged, win):
 
 # ---------- report ----------
 
-def report(icao, entry, results, new, notes, counts, gas, low, cmp_result, win, n_traces, n_qnh):
-    lines = [f"{icao}: {n_traces} traces, window {iso(win[0])} .. {iso(win[1])}"
+def report(icao, entry, results, new, notes, days, totals, cmp_total, n_qnh, min_passes):
+    n_traces = sum(d["traces"] for d in days)
+    lines = [f"{icao}: {len(days)} day(s), {n_traces} traces"
              + (f", QNH from {n_qnh} METARs" if n_qnh else ", no QNH (raw pressure altitude)")]
     for rw, r, nrw in zip(entry["runways"], results, new["runways"]):
         name = "/".join(rw["ends"])
@@ -331,61 +345,110 @@ def report(icao, entry, results, new, notes, counts, gas, low, cmp_result, win, 
                      f"offset {r['offset_km']:+.2f} km, spread {r['spread_km']:.2f} km"
                      f" -> true_track {nrw['true_track']}, gate_cross_km {nrw.get('gate_cross_km', 1.0)}")
     lines += [f"  note: {n}" for n in notes]
-    per_end = ", ".join(f"{k} {v['arr']}/{v['dep']}" for k, v in sorted(counts.items()))
-    total_arr = sum(v["arr"] for v in counts.values())
-    total_dep = sum(v["dep"] for v in counts.values())
-    lines.append(f"  replay: {total_arr} arrivals, {total_dep} departures (arr/dep per end: {per_end or '-'})")
-    lines.append(f"  go-arounds: {len(gas)}" + "".join(
-        f"\n    {iso(g['t'])} {g.get('flight') or '-'} {g['hex']} RWY{g['rwy']}" for g in gas))
-    lines.append(f"  low near the airport without a movement: {len(low)}"
-                 + (f" ({' '.join(low[:8])}{' ...' if len(low) > 8 else ''})" if low else ""))
-    if cmp_result is not None:
-        matched, only_log, only_rep = cmp_result
+    for d in days:
+        per_end = ", ".join(f"{k} {v['arr']}/{v['dep']}" for k, v in sorted(d["counts"].items()))
+        arr = sum(v["arr"] for v in d["counts"].values())
+        dep = sum(v["dep"] for v in d["counts"].values())
+        lines.append(f"  {d['label']}: {arr} arr, {dep} dep, {len(d['go_arounds'])} go-around(s),"
+                     f" {len(d['low'])} low without a movement (arr/dep: {per_end or '-'})")
+    gas = [g for d in days for g in d["go_arounds"]]
+    lines += [f"    go-around {iso(g['t'])} {g.get('flight') or '-'} {g['hex']} RWY{g['rwy']}" for g in gas]
+    # what the days did not show: so whoever adds the airport knows what to add
+    unused = [e for rw in new["runways"] for e in rw["ends"] if not any(totals.get(e, {}).values())]
+    thin = ["/".join(r["ends"]) for r in results if r["passes"] < min_passes]
+    if thin:
+        lines.append(f"  more data needed: {', '.join(thin)} had fewer than {min_passes} passes:"
+                     " add days when these runways are in use (another wind direction)")
+    if unused:
+        lines.append(f"  not seen in use: {', '.join(unused)}")
+    if cmp_total is not None:
+        matched, only_log, only_rep = cmp_total
         lines.append(f"  answer: {matched} matched, {len(only_log)} only in the log, {len(only_rep)} only in the replay")
         lines += [f"    log    {iso(t)} {k} {r} {h}" for t, k, r, h in only_log[:10]]
         lines += [f"    replay {iso(t)} {k} {r} {h}" for t, k, r, h in only_rep[:10]]
     return lines
 
 
-def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PASSES, tg=None):
+def checked_text(results, days, source=None):
+    """The entry's "checked": when, from what, how many passes per runway."""
+    span = f"{days[0]['label']}" if len(days) == 1 else f"{len(days)} days {days[0]['label']} .. {days[-1]['label']}"
+    passes = ", ".join(f"{'/'.join(r['ends'])} {r['passes']}" for r in results)
+    return (f"{time.strftime('%Y-%m-%d', time.gmtime())}: tools/tune/tune_airport.py on {span}"
+            + (f" ({source})" if source else "") + f"; passes: {passes}")
+
+
+def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PASSES, tg=None, source=None):
+    """traces: one directory or a list of them (e.g. one per day). Each is
+    read on its own, twice (measure, then replay with the recommendation),
+    so memory stays that of one directory however many are given."""
     tg = tg or load_toganomon()
+    dirs = [traces] if isinstance(traces, str) else list(traces)
     table = tg.load_airports(airports)
     entry = table.get(icao)
     if entry is None:
         raise SystemExit(f"{icao} is not in {airports or 'airports.json'}")
-    configure(tg, icao, entry)
-    docs = load_docs(tg, trace_files(traces))
-    if not docs:
-        raise SystemExit(f"no trace_full_*.json with points under {traces}")
     series = qnh_series(tg, metar)
-    win = window(docs)
-    results = measure(tg, docs, min_passes)
+
+    configure(tg, icao, entry)
+    collected, used = None, []
+    for d in dirs:
+        docs = load_docs(tg, trace_files(d))
+        if not docs:
+            print(f"{d}: no trace_full_*.json with points, skipped", file=sys.stderr)
+            continue
+        collected = collect_passes(tg, docs, collected)
+        used.append(d)
+        del docs
+    if not used:
+        raise SystemExit("no traces in " + ", ".join(dirs))
+    results = summarize(tg, collected, min_passes)
     new, notes = recommend(entry, results, min_passes)
+
     configure(tg, icao, new)
-    moves = replay(tg, docs, series)
-    inwin = [m for m in moves if win[0] <= m[0] <= win[1]]
-    counts = {}
-    for m in inwin:
-        c = counts.setdefault(m[2], {"arr": 0, "dep": 0})
-        c[m[1]] += 1
-    gas = [g for g in tg.find_go_arounds(moves) if win[0] <= g["t"] <= win[1]]
-    low = low_without_movement(tg, docs, moves, win)
-    cmp_result = compare(moves, read_log(answer, win), win) if answer else None
-    lines = report(icao, entry, results, new, notes, counts, gas, low, cmp_result, win, len(docs), len(series))
-    return new, lines, {"results": results, "counts": counts, "go_arounds": gas, "low": low, "window": win}
+    days, totals = [], {}
+    cmp_total = [0, [], []] if answer else None
+    for d in used:
+        docs = load_docs(tg, trace_files(d))
+        win = window(docs)
+        moves = replay(tg, docs, series)
+        counts = {}
+        for m in moves:
+            if win[0] <= m[0] <= win[1]:
+                for c in (counts.setdefault(m[2], {"arr": 0, "dep": 0}), totals.setdefault(m[2], {"arr": 0, "dep": 0})):
+                    c[m[1]] += 1
+        day = {"dir": d, "label": iso(win[0])[:10], "window": win, "traces": len(docs), "counts": counts,
+               "go_arounds": [g for g in tg.find_go_arounds(moves) if win[0] <= g["t"] <= win[1]],
+               "low": low_without_movement(tg, docs, moves, win)}
+        if answer:
+            m, ol, orr = compare(moves, read_log(answer, win), win)
+            cmp_total[0] += m
+            cmp_total[1] += ol
+            cmp_total[2] += orr
+        days.append(day)
+        del docs, moves
+    days.sort(key=lambda x: x["window"][0])
+    new["checked"] = checked_text(results, days, source)
+    lines = report(icao, entry, results, new, notes, days, totals, cmp_total, len(series), min_passes)
+    gas = [g for d in days for g in d["go_arounds"]]
+    low = sorted({h for d in days for h in d["low"]})
+    return new, lines, {"results": results, "counts": totals, "go_arounds": gas, "low": low, "days": days,
+                        "window": (days[0]["window"][0], days[-1]["window"][1])}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Recommend an airport's runway gates from recorded traffic.")
     ap.add_argument("icao")
-    ap.add_argument("traces", help="directory with trace_full_*.json at any depth")
+    ap.add_argument("traces", nargs="+",
+                    help="directories with trace_full_*.json at any depth, e.g. one per day (as many as you have)")
     ap.add_argument("--metar", help='METAR archive ("<ISO time>\\t<METAR>" lines) for the QNH')
     ap.add_argument("--airports", help="airports.json (or a draft from make_airports.py); default: toganomon's")
     ap.add_argument("--answer", help="toganomon movements log to compare the replay with")
     ap.add_argument("--min-passes", type=int, default=MIN_PASSES)
     ap.add_argument("--out", help="write the recommended entry here (JSON)")
+    ap.add_argument("--source", help='where the traces come from, for the entry\'s "checked" (e.g. "adsb.lol, ODbL")')
     args = ap.parse_args(argv)
-    new, lines, _ = tune(args.icao.upper(), args.traces, args.metar, args.airports, args.answer, args.min_passes)
+    new, lines, _ = tune(args.icao.upper(), args.traces, args.metar, args.airports, args.answer, args.min_passes,
+                         source=args.source)
     print("\n".join(lines))
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:

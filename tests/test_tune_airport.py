@@ -115,7 +115,28 @@ class Tune(unittest.TestCase):
         _, lines, res = self.run_tune(docs + [ga, low])
         self.assertEqual([g["hex"] for g in res["go_arounds"]], ["9a0001"])
         self.assertEqual(res["low"], ["10f001"])
-        self.assertIn("go-arounds: 1", "\n".join(lines))
+        self.assertIn("1 go-around(s)", "\n".join(lines))
+        self.assertIn("go-around ", "\n".join(lines))
+
+    def test_several_directories(self):
+        # two days, each in its own directory: passes add up, one line per day, one recommendation
+        with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+            write_traces(d1, day(n=20))
+            write_traces(d2, day(n=20, start=T0 + 86400))
+            new, lines, res = tt.tune("RJFF", [d1, d2], source="test data")
+        self.assertEqual(res["results"][0]["passes"], 80)
+        self.assertEqual(len(res["days"]), 2)
+        self.assertEqual(res["counts"], {"16": {"arr": 40, "dep": 40}})
+        text = "\n".join(lines)
+        self.assertIn("2 day(s)", text)
+        self.assertIn("not seen in use: 34", text)
+        self.assertNotIn("more data needed", text)
+        self.assertIn("on 2 days", new["checked"])
+        self.assertIn("(test data)", new["checked"])
+
+    def test_too_few_passes_says_what_to_add(self):
+        _, lines, _ = self.run_tune(day(n=5))
+        self.assertIn("more data needed: 16/34", "\n".join(lines))
 
     def test_answer_and_out(self):
         docs = day()
