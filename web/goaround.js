@@ -66,7 +66,12 @@
         return g.type ? `TYPE ${g.type}` : '';
     }
 
+    // A missed approach flown above the gate (no arrival before it): where and how low it turned back.
     function climbText(g) {
+        const m = g.missed;
+        if (m && typeof m.km === 'number' && typeof m.low_ft === 'number') {
+            return `MISSED APPROACH ${m.km} KM OUT · LOWEST ${m.low_ft} FT`;
+        }
         return typeof g.climb_after_s === 'number' ? `CLIMB AFTER ${g.climb_after_s} s` : '';
     }
 

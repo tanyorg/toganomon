@@ -469,6 +469,107 @@ class GoAround(unittest.TestCase):
                 cs.TRACES_DIR = old
 
 
+def path(t0, legs, hx="71c510", flight="AAR132"):
+    """A trace along RJFF's 16 final from (along km, alt ft) waypoints, one
+    point every 5 s; legs [(seconds, along, alt)], the first at 0 s."""
+    pts = []
+    for (s0, a0, h0), (s1, a1, h1) in zip(legs, legs[1:]):
+        for i in range(int((s1 - s0) / 5)):
+            f = i * 5 / (s1 - s0)
+            rate = (h1 - h0) / (s1 - s0) * 60
+            pts.append(gate_point(s0 + i * 5, a0 + (a1 - a0) * f, 0.0, round(h0 + (h1 - h0) * f), H16, rate))
+    s, a, h = legs[-1]
+    pts.append(gate_point(s, a, 0.0, h, H16, 0))
+    pts[0][8] = {"flight": flight, "category": "A3"}
+    return {"icao": hx, "timestamp": t0, "trace": pts}
+
+
+class MissedApproach(unittest.TestCase):
+    def tearDown(self):
+        cs.configure(RJFF)
+
+    def test_given_up_before_the_gate(self):
+        # RJFF 2026-11-24 AAR132, its second approach: down the 16 final to about
+        # 1050 ft 7.5 km out, then up to 2700 ft; no arrival, so no go-around before
+        doc = path(T0, [(0, -15.0, 2500), (120, -7.5, 1050), (200, -5.0, 2700)])
+        self.assertEqual(cs.detect_movements(doc), [])
+        ev = cs.detect_missed(doc)
+        self.assertEqual(len(ev), 1)
+        t, rwy, flight, gs, cat, info = ev[0]
+        self.assertEqual((rwy, flight, cat, info["low_ft"], info["km"]), ("16", "AAR132", "A3", 1050, 7.5))
+        self.assertAlmostEqual(info["low_t"], T0 + 120, delta=5)
+        st = {}
+        cs.record_missed(st, "71c510", ev, T0 + 300)
+        ga, = cs.find_go_arounds([], st["missed"])
+        self.assertEqual((ga["rwy"], ga["arr_t"], ga["missed"]), ("16", info["low_t"], {"low_ft": 1050, "km": 7.5}))
+
+    def test_a_dip_in_the_climb_is_one_missed_approach(self):
+        # TWB235 2026-11-19: up 500 ft, down a little, up again
+        doc = path(T0, [(0, -15.0, 2500), (120, -8.5, 1200), (150, -7.5, 1800), (180, -6.5, 1650), (240, -4.0, 2600)])
+        self.assertEqual(len(cs.detect_missed(doc)), 1)
+
+    def test_not_a_missed_approach(self):
+        cases = {
+            # straight in and landed
+            "landed": path(T0, [(0, -15.0, 2500), (200, -2.0, 100)]),
+            # level at 2000 ft on the final, then down: no climb
+            "level": path(T0, [(0, -15.0, 2000), (60, -12.0, 2000), (200, -2.0, 100)]),
+            # joining the final from above 2000 ft and climbing back: never down to 2000 ft
+            "high": path(T0, [(0, -15.0, 3500), (60, -12.0, 2100), (120, -10.0, 3000)]),
+            # up only 400 ft
+            "small": path(T0, [(0, -15.0, 2500), (120, -7.5, 1050), (160, -6.5, 1450)]),
+        }
+        for name, doc in cases.items():
+            with self.subTest(name):
+                self.assertEqual(cs.detect_missed(doc), [])
+
+    def test_take_off_is_not_on_a_final(self):
+        # off the runway at its far end region and climbing over the other end's final, outbound
+        doc = pass_trace(T0, -1, 5, 100, 1500, H16, 2400)
+        self.assertEqual(cs.detect_missed(doc), [])
+        doc = pass_trace(T0, 1, -5, 1200, 100, H34, -700)
+        doc["trace"] += [gate_point(p[0] + 100, -5 - i * 0.5, 0.0, 100 + i * 200, H34, 2400)
+                         for i, p in enumerate(pass_trace(0, 0, 1, 0, 0, H34, 0)["trace"][:6])]
+        self.assertEqual(cs.detect_missed(doc), [])
+
+    def test_a_go_around_in_the_gate_counts_once(self):
+        # low on the final to 300 ft 2.5 km out, then the climb through the gate
+        doc = path(T0, [(0, -12.0, 2500), (150, -2.5, 300), (200, -1.0, 250), (260, 2.0, 1500)])
+        moves = []
+        for e in cs.detect_movements(doc):
+            moves.append([e[0], e[1], e[2], doc["icao"]] + list(e[3:7]))
+        st = {}
+        cs.record_missed(st, doc["icao"], cs.detect_missed(doc), T0 + 300)
+        self.assertEqual(len(st["missed"]), 1)
+        ga, = cs.find_go_arounds(moves, st["missed"])
+        self.assertNotIn("missed", ga)
+
+    def test_rotorcraft_and_off(self):
+        doc = path(T0, [(0, -15.0, 2500), (120, -7.5, 1050), (200, -5.0, 2700)])
+        doc["trace"][0][8]["category"] = "A7"
+        st = {}
+        cs.record_missed(st, doc["icao"], cs.detect_missed(doc), T0 + 300)
+        self.assertEqual(cs.find_go_arounds([], st["missed"]), [])
+        cfg = dict(RJFF, go_around=dict(RJFF["go_around"], missed_approach=False))
+        cs.configure(cfg)
+        self.assertEqual(cs.detect_missed(doc), [])
+
+    def test_history_and_public(self):
+        doc = path(T0, [(0, -15.0, 2500), (120, -7.5, 1050), (200, -5.0, 2700)])
+        st = {"movements": []}
+        cs.record_missed(st, doc["icao"], cs.detect_missed(doc), T0 + 300)
+        cs.update_go_arounds(st, T0 + 300)
+        h = cs.update_history([], st, T0 + 300, None, lambda hx: doc)
+        self.assertEqual(h[0]["missed"], {"low_ft": 1050, "km": 7.5})
+        self.assertEqual(h[0]["climb_after_s"], round(h[0]["t"] - h[0]["arr_t"]))
+        pub = cs.public_history(h, T0 + 300)["go_arounds"][0]
+        self.assertEqual(pub["missed"], {"low_ft": 1050, "km": 7.5})
+
+    def test_config(self):
+        cfg = cs.parse_config({"airport": {"icao": "RJFF"}, "go_around": {"missed_approach": False, "ma_max_ft": 2500}})
+        self.assertEqual((cfg["go_around"]["missed_approach"], cfg["go_around"]["ma_max_ft"]), (False, 2500))
+
+
 class Wind(unittest.TestCase):
     def test_parse_metar_wind(self):
         w = cs.parse_metar_wind("RJFF 130800Z 33018G28KT 290V360 9999 FEW030 18/10 Q1021\n")
