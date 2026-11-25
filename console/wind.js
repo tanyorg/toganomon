@@ -1,9 +1,10 @@
 // toganomon console: the WIND window. The METAR wind over a compass with the
 // airport's runways (true tracks from go-arounds.json's airport block; METAR
-// wind is true as well), and the head/cross components on the runway in use,
+// wind is true as well), and the head/cross components on the runways in use,
 // the same way toganomon.py computes them for a go-around.
 // Wind.mount(element) builds the whole panel (dial and text) and returns
-// { update({ metar, airport, runway }) }: pass any of the three as they come.
+// { update({ metar, airport, runway }) }: pass any of the three as they come;
+// runway is one designator, a list of them (Stats' onRunway) or null.
 // Everything but Wind.draw and Wind.mount is DOM-free (tests/console_test.js).
 (function (root) {
     'use strict';
@@ -70,11 +71,16 @@
         return `RWY${name} ${hw} · XW ${c.cross}${c.from || ''}`;
     }
 
-    // Lines under the dial: runway in use first; without one, every end
-    // with a headwind (the ends the wind favours).
+    // runway: a designator, a list of them, or null -> a list
+    function inUse(runway) {
+        return Array.isArray(runway) ? runway : (typeof runway === 'string' && runway ? [runway] : []);
+    }
+
+    // Lines under the dial: the runways in use, in their order; without one,
+    // every end with a headwind (the ends the wind favours).
     function windLines(wind, airport, runway) {
         const ends = runwayEnds(airport);
-        const pick = ends.filter(e => e.name === runway);
+        const pick = inUse(runway).map(n => ends.find(e => e.name === n)).filter(Boolean);
         const list = pick.length ? pick
             : ends.filter(e => { const c = components(wind, e.track); return c && c.head >= 0; });
         return list.map(e => componentText(e.name, components(wind, e.track))).filter(Boolean);
@@ -128,6 +134,7 @@
 
     // Draw into an <svg> (viewBox -70 -70 140 140): dial, runways, arrow.
     Wind.draw = function (svg, wind, airport, runway) {
+        const on = inUse(runway);
         svg.textContent = '';
         svg.appendChild(el('circle', { r: R, class: 'wind-dial' }));
         for (const [d, l] of [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']]) {
@@ -140,8 +147,8 @@
             svg.appendChild(el('line', { x1, y1, x2, y2, class: 'wind-rwy' }));
             // a runway is named after the track flown from its threshold
             const [ax, ay] = at(r.true_track + 180, R - 14), [bx, by] = at(r.true_track, R - 14);
-            svg.appendChild(el('text', { x: ax, y: ay, class: 'wind-rwy-name' + (r.ends[0] === runway ? ' in-use' : '') }, r.ends[0]));
-            svg.appendChild(el('text', { x: bx, y: by, class: 'wind-rwy-name' + (r.ends[1] === runway ? ' in-use' : '') }, r.ends[1]));
+            svg.appendChild(el('text', { x: ax, y: ay, class: 'wind-rwy-name' + (on.includes(r.ends[0]) ? ' in-use' : '') }, r.ends[0]));
+            svg.appendChild(el('text', { x: bx, y: by, class: 'wind-rwy-name' + (on.includes(r.ends[1]) ? ' in-use' : '') }, r.ends[1]));
         }
         if (wind && wind.varFrom !== null) {
             // variable sector, on the rim

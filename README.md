@@ -30,8 +30,9 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
   registration and type, and a thinned track.
 - **The console**, one page with floating windows over the tar1090 map:
   - **WIND**: the METAR wind over a compass with the runways at their true
-    tracks, gust, variable sector and the components on the runway in use.
-  - **LAST 24H**: arrivals, departures, the runway in use, go-arounds, the
+    tracks, gust, variable sector and the components on the runways in use.
+  - **LAST 24H**: arrivals, departures, the runways in use (arrivals and
+    departures apart where they use different ones), go-arounds, the
     last go-around when there was none in 24 hours, and the aircraft the
     receiver saw.
   - **GO-AROUNDS**: every go-around; each opens to a north-up track figure.
@@ -222,7 +223,8 @@ the Docker layout (`docker/nginx.conf`).
 ## Output
 
 - `summary.json`: aircraft received in the last 24 h, arrivals, departures,
-  the runway in use, go-arounds in the window.
+  the runways in use (the last half hour, arrivals and departures apart),
+  go-arounds in the window.
 - `go-arounds.json`: every go-around, newest first, with the airport and
   runway geometry for drawing the tracks. `done` turns true once the entry
   is settled: its outcome no longer changes (an arrival that looked like a

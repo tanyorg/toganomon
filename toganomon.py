@@ -14,10 +14,13 @@ for WINDOW_S, and writes a small JSON summary:
     {"now": <readsb time>, "window_s": 86400, "total": N, "with_pos": M,
      "started": <first run time>, "arrivals": A, "departures": D,
      "runway": "<designator>" | null, "runway_t": <time of the last movement>,
+     "runways": {"arr": [<designator>, ...], "dep": [...]},
      "go_arounds": G, "last_go_around": {"t", "flight"} | null}
 
 "with_pos" counts aircraft that reported a position at least once in the
-window; "total" also includes Mode S-only aircraft.
+window; "total" also includes Mode S-only aircraft. "runway" is the runway
+of the last movement; "runways" the runways in use, several at an airport
+that lands on some and takes off from others (runways_in_use).
 
 Departures and arrivals come from readsb's per-aircraft traces (a point every
 few seconds, `--write-json-globe-index`; trace_recent of every aircraft near
@@ -153,6 +156,18 @@ TRACK_STEP_S = 10
 # aircraft was lost before landing).
 SETTLE_S = 10 * 60
 SETTLE_MAX_S = 60 * 60
+# Runways in use (summary "runways"): the runway ends with a movement in the
+# last RUNWAYS_RECENT_S, arrivals and departures apart, busiest first. An end
+# with fewer than RUNWAYS_MIN_SHARE of the busiest end's movements of the
+# same kind is left out: a stray pass (KJFK: low flights along the shore
+# across the 13R approach, 1 or 2 in half an hour next to 15 or more on 04)
+# or the last one before a runway change. RJTT lands on 22 and 23 and takes
+# off from 16L and 16R at once (2 of 13 arrivals on 23 still count). Of the
+# two ends of one runway only the one used last counts for a kind (after a
+# change of direction, not "16/34"); arrivals on one end and departures from
+# the other stay.
+RUNWAYS_RECENT_S = 30 * 60
+RUNWAYS_MIN_SHARE = 0.15
 # Use the current METAR only for a go-around detected this recently.
 METAR_FRESH_S = 15 * 60
 # QNH correction: pressure altitude + (QNH - 1013.25) * FT_PER_HPA ~ altitude
@@ -1262,6 +1277,26 @@ def public_movements(state, history, now):
     return {"now": now, "window_s": WINDOW_S, "movements": out}
 
 
+def runways_in_use(moves, now):
+    """{"arr": [...], "dep": [...]}: the runway ends in use (RUNWAYS_RECENT_S,
+    RUNWAYS_MIN_SHARE), busiest first, the latest first on a tie."""
+    out = {}
+    for kind in ("arr", "dep"):
+        count, last = {}, {}
+        for m in moves:
+            if m[1] == kind and now - m[0] <= RUNWAYS_RECENT_S:
+                count[m[2]] = count.get(m[2], 0) + 1
+                last[m[2]] = max(last.get(m[2], m[0]), m[0])
+        for rw in RUNWAYS:
+            a, b = rw["ends"]
+            if a in last and b in last:
+                del count[a if last[a] < last[b] else b]
+        top = max(count.values(), default=0)
+        ends = [r for r in count if count[r] >= top * RUNWAYS_MIN_SHARE]
+        out[kind] = sorted(ends, key=lambda r: (-count[r], -last[r]))
+    return out
+
+
 def summary(state, now):
     cutoff = now - WINDOW_S
     ac = state["aircraft"].values()
@@ -1277,6 +1312,7 @@ def summary(state, now):
         "departures": sum(1 for m in moves if m[1] == "dep"),
         "runway": moves[-1][2] if moves else None,
         "runway_t": moves[-1][0] if moves else None,
+        "runways": runways_in_use(moves, now),
         "go_arounds": len(gas),
         "last_go_around": {"t": gas[-1]["t"], "flight": gas[-1]["flight"]} if gas else None,
     }
