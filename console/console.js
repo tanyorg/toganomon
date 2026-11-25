@@ -172,6 +172,18 @@
             view.show(id);
         },
         // each new movement lands or takes off on the WIND dial, one by one
+        // the last event's text when the page opens, then each new one
+        onFirst: async doc => {
+            let gaDoc = null;
+            try {
+                const res = await fetch(DATA + 'go-arounds.json', { cache: 'no-store' });
+                if (res.ok) gaDoc = await res.json();
+            } catch (e) {
+                gaDoc = null;
+            }
+            const e = Movements.lastEvent(doc, gaDoc, timeZone);
+            if (e) wind.note(e.kind, e.text);
+        },
         onNew: list => list.forEach((m, i) => setTimeout(() => {
             const p = Movements.pulseOf(m, timeZone);
             wind.pulse(p.end, p.kind, p.text);

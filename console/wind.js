@@ -7,11 +7,13 @@
 // arrivals, green for departures, amber for both, with a small triangle
 // along the direction of use.
 // Wind.mount(element) builds the whole panel and returns
-// { update({ metar, airport, runway }), pulse(end, kind, text) }: pass any of
+// { update({ metar, airport, runway }), pulse(end, kind, text), note(kind,
+// text) }: pass any of
 // the three as they come; runway is { arr: [...], dep: [...] } (Stats'
 // onRunway), a designator, a list of them or null. pulse: something was
 // recorded on that runway end (Wind.pulse has the kinds), shown once on the
-// diagram with text (Movements.pulseOf, Movements.missedPulse) under it.
+// diagram with text (Movements.pulseOf, Movements.missedPulse) under it;
+// note: the text only (the last event when the page opens).
 // Everything but Wind.draw and Wind.mount is DOM-free (tests/console_test.js).
 (function (root) {
     'use strict';
@@ -420,14 +422,19 @@
             comp.textContent = windLines(w, st.airport, st.runway).join('\n');
         }
 
+        function note(kind, text) {
+            if (!text || !EVENT_KINDS.includes(kind)) return;
+            ev.textContent = text;
+            ev.className = 'wind-event on ' + (kind === 'missed' ? 'ga' : kind);
+        }
+
         render();
         return {
             pulse(end, kind, text) {
                 Wind.pulse(svg, lay, end, kind);
-                if (!text || !EVENT_KINDS.includes(kind)) return;
-                ev.textContent = text;
-                ev.className = 'wind-event on ' + (kind === 'missed' ? 'ga' : kind);
+                note(kind, text);
             },
+            note,
             update(part) {
                 let changed = false;
                 for (const k of ['metar', 'airport', 'runway']) {

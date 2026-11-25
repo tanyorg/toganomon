@@ -292,6 +292,19 @@ t('Movements.pulseOf / missedPulse: what RWY/WIND shows', () => {
     assert.strictEqual(M.missedPulse(null, 'Asia/Tokyo'), null);
 });
 
+t('Movements.lastEvent: the newest movement, or a newer missed approach', () => {
+    const t = Date.UTC(2026, 10, 25, 5, 46, 36) / 1000;       // 14:46 JST
+    const doc = { movements: [{ t, kind: 'arr', rwy: '16', flight: 'ANA253' }, { t: t - 60, kind: 'dep', rwy: '16', flight: 'SKY014' }] };
+    assert.strictEqual(M.lastEvent(doc, null, 'Asia/Tokyo').text, 'ANA253 ARR 16 14:46');
+    const ga = g => ({ go_arounds: [g] });
+    const missed = { id: 'a', t: t + 120, rwy: '16', flight: 'TWB207', missed: { low_ft: 980, km: 7.5 } };
+    assert.strictEqual(M.lastEvent(doc, ga(missed), 'Asia/Tokyo').kind, 'missed');
+    assert.strictEqual(M.lastEvent(doc, ga({ ...missed, t: t - 600 }), 'Asia/Tokyo').kind, 'arr');
+    assert.strictEqual(M.lastEvent(doc, ga({ ...missed, missed: null }), 'Asia/Tokyo').kind, 'arr');
+    assert.strictEqual(M.lastEvent({ movements: [] }, ga(missed), 'Asia/Tokyo').kind, 'missed');
+    assert.strictEqual(M.lastEvent(null, null, 'Asia/Tokyo'), null);
+});
+
 t('Movements.cells: local time, ARR/DEP, hex without a callsign', () => {
     assert.deepStrictEqual(M.cells(MV.movements[0], 'Asia/Tokyo'),
         { time: '16:04', dir: 'ARR', rwy: '16', flight: 'HVN356', type: 'A321', reg: 'VN-A632' });
