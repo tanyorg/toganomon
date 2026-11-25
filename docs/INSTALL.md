@@ -168,6 +168,11 @@ constants in the script, not configuration.
 window_s = 600              # a departure on the same runway within this many seconds of an arrival -> go-around
 min_gs_kt = 60              # slower arrivals are ignored
 exclude_categories = ["A7"] # emitter categories to ignore (A7 = rotorcraft)
+missed_approach = true      # also count an approach given up on the final above the gate
+ma_max_ft = 2000            # ... after coming down a final to this height above the airport or lower
+ma_climb_ft = 500           # ... and climbing this much above its lowest point
+ma_within_s = 240           # ... within this many seconds of it
+ma_final_km = 15.0          # a final reaches this far from the runway's centre
 ```
 
 ### `[candidates]` (defaults)

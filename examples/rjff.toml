@@ -35,6 +35,7 @@ rate_fpm = 200
 window_s = 600                   # arrival -> departure within this
 min_gs_kt = 60                   # slower arrivals are never paired
 exclude_categories = ["A7"]      # rotorcraft
+missed_approach = true           # also an approach given up on the final above the gate
 
 # Aircraft whose traces are read: within radius_km of the ARP and below
 # max_alt_ft above the airport, and for 5 minutes after that. Keep

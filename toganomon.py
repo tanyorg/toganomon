@@ -37,7 +37,9 @@ aircraft on the same runway within the go-around window; a real turnaround
 takes far longer. Arrivals slower than min_gs_kt or of excluded emitter
 categories (rotorcraft, A7) are not paired, nor a departure after the
 aircraft was on the ground slower than min_gs_kt (it landed; a rotorcraft
-that sends a wrong category is caught here). Each new go-around is appended
+that sends a wrong category is caught here). A missed approach above the
+gate (detect_missed: down a final, then up again, without an arrival)
+counts as a go-around too. Each new go-around is appended
 to the optional log as one tab-separated line (UTC time, callsign, runway,
 hex). Each new movement (arrival or departure) can likewise be appended to
 the optional movements log, the long-term record of how many aircraft used
@@ -120,6 +122,16 @@ DEP_IDENT_S = 60
 # look like a go-around (RJBB, 2026-11-16/20, with receivers that hear the
 # ground).
 GROUND_ARR_S = 120
+# Missed approach above the gate (detect_missed): on a final means beyond
+# the runway end by MA_THRESHOLD_KM (a take-off is on the runway), having
+# come down at least MA_DESCENT_FT in the last MA_DESCENT_S (not a level
+# segment of the approach); one per aircraft within MA_MERGE_S (a climb
+# that dips once is still one missed approach). A go-around found from the
+# movements within GA_WINDOW_S of it is the same one.
+MA_THRESHOLD_KM = 0.3
+MA_DESCENT_FT = 300
+MA_DESCENT_S = 120
+MA_MERGE_S = 300
 # An aircraft that was a candidate (near and low) stays one this long, so its
 # trace_recent is still read after it climbed out of the candidate box: a
 # fast departure goes from the runway to above max_alt_ft between two runs.
@@ -157,7 +169,11 @@ KM_PER_DEG = 111.2
 DEFAULTS = {
     "airport": {"icao": None, "arp": None, "elevation_ft": None},
     "gate": {"arr_alt_ft": 1000, "dep_alt_ft": 2000, "track_tol_deg": 20.0, "rate_fpm": 200},
-    "go_around": {"window_s": 600, "min_gs_kt": 60, "exclude_categories": ["A7"]},
+    # missed_approach: also count a missed approach flown above the gate
+    # (see detect_missed); ma_* are its limits.
+    "go_around": {"window_s": 600, "min_gs_kt": 60, "exclude_categories": ["A7"],
+                  "missed_approach": True, "ma_max_ft": 2000, "ma_climb_ft": 500,
+                  "ma_within_s": 240, "ma_final_km": 15.0},
     # max_alt_ft well above the departure gate: a departure first heard in
     # the climb can be some 3000 ft higher at the next run.
     "candidates": {"radius_km": 15.0, "max_alt_ft": 6000},
@@ -190,6 +206,7 @@ RUNWAYS = []            # [{"ends": (a, b), "true_track", "lat", "lon", "gate_al
 RUNWAY_HDG = {}         # designator -> true track
 GATE_ARR_ALT_FT = GATE_DEP_ALT_FT = TRACK_TOL_DEG = RATE_FPM = None
 GA_WINDOW_S = GA_MIN_GS_KT = None
+MA_ENABLE, MA_MAX_FT, MA_CLIMB_FT, MA_WITHIN_S, MA_FINAL_KM = True, 2000, 500, 240, 15.0
 GA_EXCLUDE_CATEGORIES = set()
 CANDIDATE_KM = CANDIDATE_ALT_FT = None
 AIRCRAFT_JSON = TRACES_DIR = STATE_PATH = GA_HISTORY = OUT_PATH = GA_OUT = METAR_PATH = GA_LOG = None
@@ -327,6 +344,7 @@ def configure(cfg):
     """Install a parsed configuration as the module settings."""
     global ICAO, ARP_LAT, ARP_LON, ELEVATION_FT, RUNWAYS, RUNWAY_HDG, GATE_ARR_ALT_FT, GATE_DEP_ALT_FT, TRACK_TOL_DEG
     global RATE_FPM, GA_WINDOW_S, GA_MIN_GS_KT, GA_EXCLUDE_CATEGORIES, CANDIDATE_KM, CANDIDATE_ALT_FT
+    global MA_ENABLE, MA_MAX_FT, MA_CLIMB_FT, MA_WITHIN_S, MA_FINAL_KM
     global AIRCRAFT_JSON, TRACES_DIR, STATE_PATH, GA_HISTORY, OUT_PATH, GA_OUT, METAR_PATH, GA_LOG
     global MOVES_LOG, MOVES_OUT, AIRCRAFT_DB
     ICAO = cfg["airport"]["icao"]
@@ -342,6 +360,8 @@ def configure(cfg):
     TRACK_TOL_DEG, RATE_FPM = g["track_tol_deg"], g["rate_fpm"]
     GA_WINDOW_S, GA_MIN_GS_KT = ga["window_s"], ga["min_gs_kt"]
     GA_EXCLUDE_CATEGORIES = set(ga["exclude_categories"])
+    MA_ENABLE, MA_MAX_FT, MA_CLIMB_FT = bool(ga["missed_approach"]), ga["ma_max_ft"], ga["ma_climb_ft"]
+    MA_WITHIN_S, MA_FINAL_KM = ga["ma_within_s"], ga["ma_final_km"]
     CANDIDATE_KM, CANDIDATE_ALT_FT = c["radius_km"], c["max_alt_ft"]
     AIRCRAFT_JSON, TRACES_DIR, STATE_PATH = p["aircraft"], p["traces"], p["state"]
     GA_HISTORY, OUT_PATH, GA_OUT = p["history"], p["summary"], p["go_arounds"]
@@ -550,6 +570,90 @@ def detect_movements(doc, alt_offset=0.0, now=None):
     return out
 
 
+def _finals(p):
+    """[(runway designator, km before the runway's centre)] of the finals the
+    point is on: beyond the runway end, inside the gate's width, flying
+    towards the runway within TRACK_TOL_DEG."""
+    out = []
+    for rw in RUNWAYS:
+        along, cross = runway_frame(p[1], p[2], rw)
+        if abs(cross) > rw["gate_cross_km"]:
+            continue
+        end_km = (rw["length_m"] or 3000) / 2000.0 + MA_THRESHOLD_KM
+        for rwy, hdg, before in ((rw["ends"][0], rw["true_track"], -along),
+                                 (rw["ends"][1], rw["true_track"] + 180.0, along)):
+            if end_km <= before <= MA_FINAL_KM and _angdiff(p[5], hdg) <= TRACK_TOL_DEG:
+                out.append((rwy, before))
+    return out
+
+
+def detect_missed(doc, alt_offset=0.0):
+    """readsb trace document -> missed approaches flown above the gate:
+    [(time of the climb, runway, callsign, ground speed kt at the lowest
+    point, emitter category, {"low_t", "low_ft" (above the airport), "km"
+    (before the runway's centre)})].
+
+    Coming down a final (MA_DESCENT_FT within MA_DESCENT_S) to MA_MAX_FT
+    or lower, then MA_CLIMB_FT above the lowest point within MA_WITHIN_S
+    without touching the ground. An approach given up before the gate
+    (RJFF 2026-11-24 AAR132, its second approach: lowest about 1050 ft,
+    7.5 km out) makes no arrival, so detect_movements cannot see it; a
+    go-around inside the gate usually shows here too and find_go_arounds
+    keeps one of the two. alt_offset as for detect_movements (so the
+    heights are above the airport).
+    """
+    t0 = doc.get("timestamp")
+    out, flight, cat = [], None, None
+    if not MA_ENABLE or not isinstance(t0, (int, float)):
+        return out
+    low = None          # [t, ft, runway, km, gs] of the lowest point so far
+    recent = []         # [(t, ft)] of the last MA_DESCENT_S
+    prev = None
+    for p in doc.get("trace") or []:
+        if not (isinstance(p, list) and p and isinstance(p[0], (int, float))):
+            continue
+        flight = _flight(p) or flight
+        cat = _category(p) or cat
+        t = t0 + p[0]
+        if len(p) > 3 and p[3] == "ground":
+            low, recent, prev = None, [], None
+            continue
+        num = (int, float)
+        if len(p) < 6 or not all(isinstance(v, num) and not isinstance(v, bool) for v in (p[1], p[2], p[3], p[4], p[5])):
+            continue
+        ft = p[3] + alt_offset
+        recent = [r for r in recent if t - r[0] <= MA_DESCENT_S] + [(t, ft)]
+        if low is not None and t - low[0] > MA_WITHIN_S:
+            low = None
+        on = _finals(p) if ft <= MA_MAX_FT and p[4] >= GA_MIN_GS_KT else []
+        descending = prev is not None and prev >= ft
+        if on and descending and (low is not None or max(r[1] for r in recent) >= ft + MA_DESCENT_FT) \
+                and (low is None or ft <= low[1]):
+            low = [t, ft, on[0][0], on[0][1], p[4]]
+        elif low is not None and ft >= low[1] + MA_CLIMB_FT:
+            if not out or t - out[-1][0] > MA_MERGE_S:
+                out.append((t, low[2], flight, round(low[4]), cat,
+                            {"low_t": low[0], "low_ft": round(low[1]), "km": round(low[3], 1)}))
+            low = None
+        prev = ft
+    return out
+
+
+def record_missed(state, hx, events, now):
+    """Add one aircraft's missed approaches to state["missed"] ([time, runway,
+    hex, callsign, ground speed, category, info]), one per MA_MERGE_S, and
+    prune it to WINDOW_S."""
+    missed = state.get("missed")
+    if not isinstance(missed, list):
+        missed = state["missed"] = []
+    for t, rwy, flight, gs, cat, info in events:
+        if t < now - WINDOW_S or any(m[2] == hx and abs(m[0] - t) <= MA_MERGE_S for m in missed):
+            continue
+        missed.append([t, rwy, hx, flight, gs, cat, info])
+    missed[:] = sorted((m for m in missed if m[0] >= now - WINDOW_S), key=lambda m: m[0])
+    return state
+
+
 def _ident_after(pts, i, flight, cat):
     """Callsign and category for a departure at pts[i]: the first ones
     broadcast within DEP_IDENT_S from the pass, else what was known before;
@@ -740,6 +844,7 @@ def update_movements(state, snapshot, alt_offset=0.0):
             doc = load_trace(path)
             if doc and isinstance(doc.get("icao"), str):
                 record_movements(state, doc["icao"], detect_movements(doc, alt_offset), now)
+                record_missed(state, doc["icao"], detect_missed(doc, alt_offset), now)
     keep = state.get("candidates")
     if not isinstance(keep, dict):
         keep = state["candidates"] = {}
@@ -751,6 +856,8 @@ def update_movements(state, snapshot, alt_offset=0.0):
         doc = load_trace(trace_path(hx, "recent"))
         if doc:
             record_movements(state, hx, detect_movements(doc, alt_offset, now), now)
+            record_missed(state, hx, detect_missed(doc, alt_offset), now)
+    record_missed(state, "", [], now)
     return record_movements(state, "", [], now)
 
 
@@ -761,12 +868,15 @@ def _ga_capable(m):
     return not ((gs is not None and gs < GA_MIN_GS_KT) or cat in GA_EXCLUDE_CATEGORIES)
 
 
-def find_go_arounds(moves):
+def find_go_arounds(moves, missed=()):
     """Arrival -> departure pairs of one aircraft on one runway within GA_WINDOW_S,
-    unless the aircraft landed in between (the departure's landed flag).
+    unless the aircraft landed in between (the departure's landed flag); and
+    the missed approaches (state["missed"]) that no such pair of the same
+    aircraft is within GA_WINDOW_S of.
 
     Returns [{"t": departure time, "arr_t", "hex", "flight", "rwy", "gs"
-    (arrival ground speed), "category"}].
+    (arrival ground speed), "category"}], sorted by time; a missed approach
+    has "t" its climb, "arr_t" its lowest point and "missed": {"low_ft", "km"}.
     """
     out, last_arr = [], {}
     for m in sorted(moves, key=lambda m: m[0]):
@@ -782,6 +892,15 @@ def find_go_arounds(moves):
             out.append({"t": t, "arr_t": a[0], "hex": hx,
                         "flight": flight or (a[4] if len(a) > 4 else None), "rwy": rwy,
                         "gs": a[5] if len(a) > 5 else None, "category": cat})
+    pairs = list(out)
+    for t, rwy, hx, flight, gs, cat, info in missed:
+        if not _ga_capable([None] * 5 + [gs, cat]):
+            continue
+        if any(g["hex"] == hx and abs(g["t"] - t) <= GA_WINDOW_S for g in pairs):
+            continue
+        out.append({"t": t, "arr_t": info["low_t"], "hex": hx, "flight": flight, "rwy": rwy, "gs": gs,
+                    "category": cat, "missed": {"low_ft": info["low_ft"], "km": info["km"]}})
+    out.sort(key=lambda g: g["t"])
     return out
 
 
@@ -827,7 +946,7 @@ def update_go_arounds(state, now, log=None):
     """Record go-arounds not seen before; returns the new ones."""
     known = state.setdefault("go_arounds", [])
     new = []
-    for ga in find_go_arounds(state.get("movements", [])):
+    for ga in find_go_arounds(state.get("movements", []), state.get("missed", [])):
         if any(k["hex"] == ga["hex"] and abs(k["t"] - ga["t"]) < 60 for k in known):
             continue
         if not ga["flight"]:
@@ -984,7 +1103,7 @@ def update_history(history, state, now, metar_text=None, trace_loader=None, qnh=
             "flight": ga.get("flight"), "rwy": ga["rwy"],
             "climb_after_s": round(ga["t"] - ga["arr_t"]) if ga.get("arr_t") else None,
             "wind": wind, "wind_rwy": wind_components(wind, ga["rwy"]), "qnh": qnh,
-            "gs": ga.get("gs"), "category": ga.get("category"),
+            "gs": ga.get("gs"), "category": ga.get("category"), "missed": ga.get("missed"),
             "outcome": {"status": "pending"}, "track": [], "track_from": None, "done": False,
         })
         ids.add(gid)
@@ -1097,7 +1216,7 @@ def airport_info():
 def public_history(history, now):
     """GA_OUT payload: newest first, without internal fields."""
     keep = ("id", "t", "arr_t", "hex", "flight", "reg", "type", "rwy", "climb_after_s", "wind",
-            "wind_rwy", "qnh", "gs", "category", "outcome", "track", "track_from", "done")
+            "wind_rwy", "qnh", "gs", "category", "missed", "outcome", "track", "track_from", "done")
     nth = airframe_nth(history)
     return {"now": now, "airport": airport_info(),
             "go_arounds": [dict({k: h.get(k) for k in keep}, nth=nth[h.get("id")]) for h in reversed(history)]}

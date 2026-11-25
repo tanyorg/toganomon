@@ -21,7 +21,10 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 - **Go-arounds.** An arrival through a runway gate (low, on the extended
   centreline, heading along the runway) followed by a departure of the same
   aircraft on the same runway within 10 minutes. A departure needs a real
-  climb (200 ft within 30 s), so a gusty final does not fake one. Each
+  climb (200 ft within 30 s), so a gusty final does not fake one. An
+  approach given up higher up counts too (a **missed approach**): down a
+  final to 2000 ft or lower, then up 500 ft within 4 minutes, without an
+  arrival. Each
   go-around is kept with the METAR wind and its head/cross components, what
   happened next (landed / went around again / did not land), the
   registration and type, and a thinned track.
@@ -224,6 +227,9 @@ the Docker layout (`docker/nginx.conf`).
   landing can still become another go-around) and the track is complete.
   An `outcome` of `not_landed` carries `within_s`, the time waited for a
   landing (3600).
+  A missed approach above the gate carries `missed`: `low_ft` (its lowest
+  point above the airport) and `km` (how far before the runway's centre);
+  its `arr_t` is that lowest point.
   `nth` is 2 (3, ...) when the same airframe with the same callsign went
   around within the previous 2 hours. `reg` and `type` (ICAO type
   designator) come from the tar1090 aircraft database; null when unknown.
@@ -241,12 +247,12 @@ In Docker, the JSON is served at `/toganomon/` and the logs are on the
 
 ## Known limitations
 
-- Only an aircraft that came down low through the gate and then climbed is
-  counted, to avoid false detections. An approach abandoned before or above
-  the gate is no arrival, so it is no go-around either (it counts as one
-  departure). Example: TWB207 on 2026-11-19 began its climb 8 km short of
-  RWY16 at 1175 ft and never entered the gate (6 km along, 1000 ft and
-  below).
+- A go-around is an aircraft that came down low through the gate and then
+  climbed, or one that came down a final to 2000 ft or lower and climbed
+  500 ft again (a missed approach above the gate, e.g. TWB207 on 2026-11-19,
+  7 km short of RJFF RWY16 at about 1000 ft). An approach given up higher
+  than that, or off the extended centreline (a circling or curved
+  approach), is not counted.
 - What is not received cannot be judged. Where the ground and low altitudes
   are not received, a departure may first be seen already climbing (which
   is why the candidate altitude is well above the departure gate).

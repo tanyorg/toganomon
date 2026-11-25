@@ -276,10 +276,11 @@ def window(docs):
     return lo + WINDOW_HEAD_S, hi - WINDOW_TAIL_S
 
 
-def replay(tg, docs, series):
+def replay(tg, docs, series, missed=None):
     """Movements of all traces, as toganomon records them (QNH from series
-    at the middle of each trace)."""
-    state = {"movements": []}
+    at the middle of each trace). With missed (a list), the missed approaches
+    above the gate are added to it, as in toganomon's state["missed"]."""
+    state = {"movements": [], "missed": missed if missed is not None else []}
     for doc, t0, t1 in docs:
         q = qnh_at(series, (t0 + t1) / 2) if series else None
         off = tg.qnh_offset_ft(q) - tg.ELEVATION_FT
@@ -288,6 +289,10 @@ def replay(tg, docs, series):
         for e in events:
             if not tg._same_pass(moves, doc["icao"], e[1], e[0]):
                 moves.append([e[0], e[1], e[2], doc["icao"]] + list(e[3:7]))
+        if missed is not None:
+            for t, rwy, flight, gs, cat, info in tg.detect_missed(doc, off):
+                if not any(m[2] == doc["icao"] and abs(m[0] - t) <= tg.MA_MERGE_S for m in missed):
+                    missed.append([t, rwy, doc["icao"], flight, gs, cat, info])
     state["movements"].sort(key=lambda m: m[0])
     return state["movements"]
 
@@ -433,7 +438,9 @@ def report(icao, entry, results, new, notes, days, totals, cmp_total, n_qnh, min
         lines.append(f"  {d['label']}: {arr} arr, {dep} dep, {len(d['go_arounds'])} go-around(s),"
                      f" {len(d['low'])} low without a movement (arr/dep: {per_end or '-'})")
     gas = [g for d in days for g in d["go_arounds"]]
-    lines += [f"    go-around {iso(g['t'])} {g.get('flight') or '-'} {g['hex']} RWY{g['rwy']}" for g in gas]
+    lines += [f"    go-around {iso(g['t'])} {g.get('flight') or '-'} {g['hex']} RWY{g['rwy']}"
+              + (f" (missed approach, lowest {g['missed']['low_ft']} ft, {g['missed']['km']} km out)" if g.get("missed") else "")
+              for g in gas]
     seconds = [s for d in days for s in d["second"]]
     missed = [s for s in seconds if not s["found"]]
     lines.append(f"  second approaches (low, up {CLIMB_BETWEEN_FT} ft, low again): {len(seconds)},"
@@ -498,14 +505,15 @@ def tune(icao, traces, metar=None, airports=None, answer=None, min_passes=MIN_PA
     for d in used:
         docs = load_docs(tg, trace_files(d))
         win = window(docs)
-        moves = replay(tg, docs, series)
+        missed = []
+        moves = replay(tg, docs, series, missed)
         counts = {}
         for m in moves:
             if win[0] <= m[0] <= win[1]:
                 for c in (counts.setdefault(m[2], {"arr": 0, "dep": 0}), totals.setdefault(m[2], {"arr": 0, "dep": 0})):
                     c[m[1]] += 1
         day = {"dir": d, "label": iso(win[0])[:10], "window": win, "traces": len(docs), "counts": counts,
-               "go_arounds": [g for g in tg.find_go_arounds(moves) if win[0] <= g["t"] <= win[1]],
+               "go_arounds": [g for g in tg.find_go_arounds(moves, missed) if win[0] <= g["t"] <= win[1]],
                "low": low_without_movement(tg, docs, moves, win)}
         # a second approach is "found" when a go-around of the same aircraft is within 10 minutes of it
         day["second"] = [dict(s, found=any(g["hex"] == s["hex"] and abs(g["t"] - s["t"]) <= 600

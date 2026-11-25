@@ -44,6 +44,8 @@ t('title: registration and the same airframe\'s 2nd go-around', () => {
 t('climbText', () => {
     assert.strictEqual(v.climbText(base), 'CLIMB AFTER 65 s');
     assert.strictEqual(v.climbText({ ...base, climb_after_s: null }), '');
+    assert.strictEqual(v.climbText({ ...base, climb_after_s: 20, missed: { low_ft: 1050, km: 7.5 } }),
+        'MISSED APPROACH 7.5 KM OUT · LOWEST 1050 FT');
 });
 
 t('outcomeText: every status', () => {
