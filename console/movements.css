@@ -2,7 +2,7 @@
    .mv-window on the window (with float.css's .float .float-fill) sizes it;
    a page may override the size. */
 .mv-window {
-    width: 340px;
+    width: 360px;
     height: 60vh;
     min-width: 260px;
     min-height: 160px;
@@ -53,7 +53,11 @@
 .mv-list { flex: 1; min-height: 0; overflow-y: auto; }
 .mv-row {
     display: grid;
-    grid-template-columns: 3.2em 3.1em 2.2em minmax(4.5em, 1fr) 3.2em 6em 2.6em;
+    /* widths in ch (the font's own character width), not em: the fallback
+       fonts differ in width (Edge has no ui-monospace), and em-sized columns
+       cut "17:22" and "B738" there. time, ARR/DEP badge (smaller, padded),
+       runway, callsign, type, registration, G/A button */
+    grid-template-columns: 5.2ch calc(3.2ch + 10px) 3.2ch minmax(7ch, 1fr) 4.4ch 8.2ch calc(3ch + 12px);
     gap: 4px;
     align-items: center;
     padding: 2px 2px;
