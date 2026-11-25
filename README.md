@@ -142,8 +142,10 @@ This starts three containers:
 
 An airport in [`airports.json`](airports.json) needs only its ICAO code
 (`TOGANOMON_ICAO`): the reference point, the elevation and the runway gates
-come from there. It holds only Fukuoka (RJFF) for now. More airports are
-welcome as pull requests:
+come from there. It holds Fukuoka (RJFF), checked with a receiver there, and
+Kansai (RJBB), Haneda (RJTT), Los Angeles (KLAX) and New York JFK (KJFK),
+tuned on four days of adsb.lol traces each (not run live yet). More
+airports are welcome as pull requests:
 
 1. Draft the entry from [OurAirports](https://ourairports.com/data/)
    (public domain) with `tools/make_airports.py airports.csv runways.csv
