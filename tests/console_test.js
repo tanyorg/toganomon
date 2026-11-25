@@ -251,17 +251,19 @@ t('Clock.zoneLabel: abbreviation where one exists, else an offset', () => {
 const T = Date.UTC(2026, 10, 24, 7, 4, 29) / 1000;
 const MV = { now: T + 600, window_s: 86400, movements: [
     { t: T, kind: 'arr', rwy: '16', hex: '888165', flight: 'HVN356', gs: 155, category: 'A3', reg: 'VN-A632', type: 'A321', ga: null },
-    { t: T - 60, kind: 'dep', rwy: '16', hex: '8681b7', flight: null, gs: 150, category: 'A3', reg: null, type: null, ga: 'x-1' },
-    { t: T - 120, kind: 'arr', rwy: '16', hex: '8681b7', flight: 'ANA240', gs: 140, category: 'A3', reg: 'JA73NR', type: 'B738', ga: 'x-1' },
-    { t: 'bad', kind: 'arr' }, null,
+    { t: T - 60, kind: 'dep', rwy: '16', hex: '8681b7', flight: null, gs: 150, category: 'A3', reg: null, type: null, ga: null },
+    { t: T - 120, kind: 'arr', rwy: '16', hex: '8681b7', flight: 'ANA240', gs: 140, category: 'A3', reg: 'JA73NR', type: 'B738', ga: null },
+    { t: T - 900, kind: 'ga', rwy: '16', hex: '86804e', flight: 'SKY508', gs: 142, category: 'A3', reg: 'JA738A', type: 'B38M', ga: '86804e-1', final: true },
+    { t: 'bad', kind: 'arr' }, null, { t: T, kind: 'taxi' },
 ] };
 
 t('Movements.view: rows for a filter and the counts', () => {
     const all = M.view(MV, 'ALL');
-    assert.deepStrictEqual(all.counts, { ALL: 3, ARR: 2, DEP: 1 });
-    assert.deepStrictEqual(all.rows.map(m => m.t), [T, T - 60, T - 120]);
+    assert.deepStrictEqual(all.counts, { ALL: 4, ARR: 2, DEP: 1, 'G/A': 1 });
+    assert.deepStrictEqual(all.rows.map(m => m.t), [T, T - 60, T - 120, T - 900]);
     assert.deepStrictEqual(M.view(MV, 'DEP').rows.map(m => m.kind), ['dep']);
-    assert.deepStrictEqual(M.view(null, 'ARR'), { rows: [], counts: { ALL: 0, ARR: 0, DEP: 0 } });
+    assert.deepStrictEqual(M.view(MV, 'G/A').rows.map(m => m.flight), ['SKY508']);
+    assert.deepStrictEqual(M.view(null, 'ARR'), { rows: [], counts: { ALL: 0, ARR: 0, DEP: 0, 'G/A': 0 } });
 });
 
 t('Movements.newMovements: the ones since the last poll, oldest first', () => {
@@ -276,33 +278,27 @@ t('Movements.newMovements: the ones since the last poll, oldest first', () => {
     assert.deepStrictEqual(M.newMovements(prev, many).map(m => m.hex), ['n2', 'n3', 'n4', 'n5']);
 });
 
-t('Movements.pulseOf / missedPulse: what RWY/WIND shows', () => {
+t('Movements.pulseOf: what RWY/WIND shows', () => {
     const t = Date.UTC(2026, 10, 25, 5, 46, 36) / 1000;       // 14:46 JST
     assert.deepStrictEqual(M.pulseOf({ t, kind: 'arr', rwy: '16', flight: 'ANA253', hex: '86951c' }, 'Asia/Tokyo'),
         { end: '16', kind: 'arr', text: 'ANA253 ARR 16 14:46' });
     assert.deepStrictEqual(M.pulseOf({ t, kind: 'dep', rwy: '34', flight: null, hex: '86951c' }, 'Asia/Tokyo').text,
         '86951C DEP 34 14:46');
-    // the climb of a go-around
-    assert.deepStrictEqual(M.pulseOf({ t, kind: 'dep', rwy: '16', flight: 'AAR132', hex: '71c510', ga: 'x' }, 'Asia/Tokyo'),
-        { end: '16', kind: 'ga', text: 'GO-AROUND OVER RWY\nAAR132 RWY16 14:46' });
-    // a missed approach above the gate, from go-arounds.json; nothing for another go-around
-    const g = { id: 'a', t, rwy: '16', flight: 'TWB207', hex: '71c0a1', missed: { low_ft: 980, km: 7.5 } };
-    assert.deepStrictEqual(M.missedPulse(g, 'Asia/Tokyo'), { end: '16', kind: 'missed', text: 'GO-AROUND ON FINAL\nTWB207 RWY16 14:46' });
-    assert.strictEqual(M.missedPulse({ ...g, missed: null }, 'Asia/Tokyo'), null);
-    assert.strictEqual(M.missedPulse(null, 'Asia/Tokyo'), null);
+    // a go-around row: through the gate, or given up above it (the final blinks)
+    const g = { t, kind: 'ga', rwy: '16', flight: 'AAR132', hex: '71c510', ga: 'x', final: false };
+    assert.deepStrictEqual(M.pulseOf(g, 'Asia/Tokyo'), { end: '16', kind: 'ga', text: 'GO-AROUND OVER RWY\nAAR132 RWY16 14:46' });
+    assert.deepStrictEqual(M.pulseOf({ ...g, flight: 'TWB207', final: true }, 'Asia/Tokyo'),
+        { end: '16', kind: 'missed', text: 'GO-AROUND ON FINAL\nTWB207 RWY16 14:46' });
 });
 
-t('Movements.lastEvent: the newest movement, or a newer missed approach', () => {
+t('Movements.lastEvent: the newest movement, a go-around too', () => {
     const t = Date.UTC(2026, 10, 25, 5, 46, 36) / 1000;       // 14:46 JST
     const doc = { movements: [{ t, kind: 'arr', rwy: '16', flight: 'ANA253' }, { t: t - 60, kind: 'dep', rwy: '16', flight: 'SKY014' }] };
-    assert.strictEqual(M.lastEvent(doc, null, 'Asia/Tokyo').text, 'ANA253 ARR 16 14:46');
-    const ga = g => ({ go_arounds: [g] });
-    const missed = { id: 'a', t: t + 120, rwy: '16', flight: 'TWB207', missed: { low_ft: 980, km: 7.5 } };
-    assert.strictEqual(M.lastEvent(doc, ga(missed), 'Asia/Tokyo').kind, 'missed');
-    assert.strictEqual(M.lastEvent(doc, ga({ ...missed, t: t - 600 }), 'Asia/Tokyo').kind, 'arr');
-    assert.strictEqual(M.lastEvent(doc, ga({ ...missed, missed: null }), 'Asia/Tokyo').kind, 'arr');
-    assert.strictEqual(M.lastEvent({ movements: [] }, ga(missed), 'Asia/Tokyo').kind, 'missed');
-    assert.strictEqual(M.lastEvent(null, null, 'Asia/Tokyo'), null);
+    assert.strictEqual(M.lastEvent(doc, 'Asia/Tokyo').text, 'ANA253 ARR 16 14:46');
+    doc.movements.unshift({ t: t + 120, kind: 'ga', rwy: '16', flight: 'TWB207', final: true });
+    assert.strictEqual(M.lastEvent(doc, 'Asia/Tokyo').kind, 'missed');
+    assert.strictEqual(M.lastEvent({ movements: [] }, 'Asia/Tokyo'), null);
+    assert.strictEqual(M.lastEvent(null, 'Asia/Tokyo'), null);
 });
 
 t('Movements.cells: local time, ARR/DEP, hex without a callsign', () => {
@@ -317,6 +313,9 @@ t('Movements.traceParams: the approach or the climb, inside the UTC day', () => 
         { icao: '888165', showTrace: '2026-11-24', startTime: '06:49:29', endTime: '07:07:29' });
     assert.deepStrictEqual(M.traceParams(MV.movements[1]),
         { icao: '8681b7', showTrace: '2026-11-24', startTime: '07:00:29', endTime: '07:18:29' });
+    // a go-around: the approach before it and the climb after it
+    assert.deepStrictEqual(M.traceParams(MV.movements[3]),
+        { icao: '86804e', showTrace: '2026-11-24', startTime: '06:34:29', endTime: '07:04:29' });
     const early = { t: Date.UTC(2026, 10, 24, 0, 5, 0) / 1000, kind: 'arr', hex: 'ABC123' };
     assert.deepStrictEqual(M.traceParams(early),
         { icao: 'abc123', showTrace: '2026-11-24', startTime: '00:00:00', endTime: '00:08:00' });
@@ -337,6 +336,8 @@ t('Movements.withDays: a line before each day, in the zone', () => {
 t('Movements.showingText: which flight the map shows', () => {
     assert.strictEqual(M.showingText(MV.movements[0], 'Asia/Tokyo', false), 'MAP: HVN356 ARR 16:04 · TRACE');
     assert.strictEqual(M.showingText(MV.movements[1], 'UTC', true), 'MAP: 8681B7 DEP 07:03 · LIVE');
+    assert.strictEqual(M.showingText(MV.movements[3], 'Asia/Tokyo', false), 'MAP: SKY508 G/A 15:49 · TRACE');
+    assert.strictEqual(M.cells(MV.movements[3], 'Asia/Tokyo').dir, 'G/A');
 });
 
 t('Movements.mapView: live while the window runs, else the history', () => {

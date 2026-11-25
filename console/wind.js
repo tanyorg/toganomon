@@ -12,7 +12,7 @@
 // the three as they come; runway is { arr: [...], dep: [...] } (Stats'
 // onRunway), a designator, a list of them or null. pulse: something was
 // recorded on that runway end (Wind.pulse has the kinds), shown once on the
-// diagram with text (Movements.pulseOf, Movements.missedPulse) under it;
+// diagram with text (Movements.pulseOf) under it;
 // note: the text only (the last event when the page opens).
 // Everything but Wind.draw and Wind.mount is DOM-free (tests/console_test.js).
 (function (root) {

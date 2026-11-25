@@ -14,7 +14,7 @@
 .mv-window .mv-view { flex: 1; }
 .mv-view { display: flex; flex-direction: column; min-height: 0; font-size: 0.72rem; }
 .mv-bar { display: flex; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid #30363d; }
-.mv-tab, .mv-back, .mv-ga button {
+.mv-tab, .mv-back, .mv-open button {
     background: #0d1117;
     border: 1px solid #30363d;
     border-radius: 3px;
@@ -55,8 +55,8 @@
     display: grid;
     /* widths in ch (the font's own character width), not em: the fallback
        fonts differ in width (Edge has no ui-monospace), and em-sized columns
-       cut "17:22" and "B738" there. time, ARR/DEP badge (smaller, padded),
-       runway, callsign, type, registration, G/A button */
+       cut "17:22" and "B738" there. time, ARR/DEP/G/A badge (smaller, padded),
+       runway, callsign, type, registration, go-around button */
     grid-template-columns: 5.2ch calc(3.2ch + 10px) 3.2ch minmax(7ch, 1fr) 4.4ch 8.2ch calc(3ch + 12px);
     gap: 4px;
     align-items: center;
@@ -70,9 +70,10 @@
 .mv-row.selected { background: #1f2937; outline: 1px solid #388bfd; }
 .mv-row > span { overflow: hidden; text-overflow: ellipsis; }
 .mv-time { color: #8b949e; font-variant-numeric: tabular-nums; }
-/* ARR / DEP: a colour bar on the left of the row and a badge */
+/* ARR / DEP / G/A: a colour bar on the left of the row and a badge */
 .mv-arr { border-left-color: #58a6ff; }
 .mv-dep { border-left-color: #3fb950; }
+.mv-ga { border-left-color: #d29922; }
 .mv-row > .mv-dir {
     justify-self: start;
     padding: 0 4px;
@@ -84,7 +85,8 @@
 }
 .mv-arr .mv-dir { background: #58a6ff; }
 .mv-dep .mv-dir { background: #3fb950; }
+.mv-ga .mv-dir { background: #d29922; }
 .mv-flight { color: #c9d1d9; font-weight: bold; }
 .mv-type, .mv-reg { color: #8b949e; }
-.mv-ga button { color: #d29922; border-color: #d29922; padding: 0 3px; }
+.mv-open button { color: #d29922; border-color: #d29922; padding: 0 3px; }
 .mv-empty { color: #8b949e; padding: 8px 2px; }

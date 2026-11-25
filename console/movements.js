@@ -1,13 +1,15 @@
-// toganomon console: the MOVEMENTS window. The arrivals and departures of
-// the last 24 hours (movements.json written by toganomon.py), newest first,
-// with a filter (ALL / ARR / DEP).
+// toganomon console: the MOVEMENTS window. The arrivals, departures and
+// go-arounds of the last 24 hours (movements.json written by toganomon.py),
+// newest first, with a filter (ALL / ARR / DEP / G/A). A go-around is one
+// row of its own (kind "ga"), OVER RWY or ON FINAL ("final"), neither an
+// arrival nor a departure.
 //
 //   const mv = Movements.mount(element, {
 //       url: '/toganomon/movements.json',   // polled every pollMs (60000; 0 = no polling)
 //       timeZone: 'Asia/Tokyo',             // times in the list (default UTC)
 //       onSelect(m, view) {},   // a row was clicked: view = Movements.mapView(m, now);
 //                               // (null, null) to go back to the live map
-//       onGa(id) {},        // the G/A mark of a row was clicked (go-around id)
+//       onGa(id) {},        // the ▸ of a go-around row was clicked (go-around id)
 //       onNew(list) {},     // movements recorded since the last poll, oldest
 //                           // first (Movements.newMovements); not on the first
 //       onFirst(doc) {},    // the first movements.json read (Movements.lastEvent)
@@ -27,9 +29,10 @@
 (function (root) {
     'use strict';
 
-    const FILTERS = ['ALL', 'ARR', 'DEP'];
+    const FILTERS = ['ALL', 'ARR', 'DEP', 'G/A'];
+    const KINDS = { arr: 'ARR', dep: 'DEP', ga: 'G/A' };
     // The part of the flight a row shows: the approach before an arrival,
-    // the climb after a departure (seconds).
+    // the climb after a departure (seconds); a go-around both.
     const TRACE_BEFORE_ARR_S = 15 * 60;
     const TRACE_AFTER_ARR_S = 3 * 60;
     const TRACE_BEFORE_DEP_S = 3 * 60;
@@ -69,28 +72,29 @@
     // TRACE: the history, as loaded).
     function showingText(m, timeZone, live) {
         const c = cells(m, timeZone);
-        return `MAP: ${c.flight} ${m.kind === 'arr' ? 'ARR' : 'DEP'} ${c.time} · ${live ? 'LIVE' : 'TRACE'}`;
+        return `MAP: ${c.flight} ${c.dir} ${c.time} · ${live ? 'LIVE' : 'TRACE'}`;
     }
 
     // Movements to list for a filter, and the count for each filter.
     function view(doc, filter) {
         const all = (doc && Array.isArray(doc.movements) ? doc.movements : [])
-            .filter(m => m && typeof m.t === 'number' && (m.kind === 'arr' || m.kind === 'dep'));
+            .filter(m => m && typeof m.t === 'number' && m.kind in KINDS);
         const counts = {
             ALL: all.length,
             ARR: all.filter(m => m.kind === 'arr').length,
             DEP: all.filter(m => m.kind === 'dep').length,
+            'G/A': all.filter(m => m.kind === 'ga').length,
         };
-        const kind = { ARR: 'arr', DEP: 'dep' }[filter];
+        const kind = { ARR: 'arr', DEP: 'dep', 'G/A': 'ga' }[filter];
         return { rows: kind ? all.filter(m => m.kind === kind) : all, counts };
     }
 
-    // The cells of one row: time, ARR/DEP and runway, callsign (hex without
-    // one), type, registration.
+    // The cells of one row: time, ARR/DEP/G/A and runway, callsign (hex
+    // without one), type, registration.
     function cells(m, timeZone) {
         return {
             time: hhmm(m.t, timeZone),
-            dir: m.kind === 'arr' ? 'ARR' : 'DEP',
+            dir: KINDS[m.kind] || '?',
             rwy: m.rwy || '--',
             flight: m.flight || (m.hex ? m.hex.toUpperCase() : '--'),
             type: m.type || '',
@@ -101,8 +105,8 @@
     // tar1090 query for the movement's flight: its trace of that UTC day,
     // limited to the approach or the climb (kept inside the day).
     function traceParams(m) {
-        const before = m.kind === 'arr' ? TRACE_BEFORE_ARR_S : TRACE_BEFORE_DEP_S;
-        const after = m.kind === 'arr' ? TRACE_AFTER_ARR_S : TRACE_AFTER_DEP_S;
+        const before = m.kind === 'dep' ? TRACE_BEFORE_DEP_S : TRACE_BEFORE_ARR_S;
+        const after = traceAfter(m);
         const t = new Date(m.t * 1000);
         const day = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) / 1000;
         const clock = s => {
@@ -119,11 +123,15 @@
         };
     }
 
+    function traceAfter(m) {
+        return m.kind === 'arr' ? TRACE_AFTER_ARR_S : TRACE_AFTER_DEP_S;
+    }
+
     // {live, params}: live (icao only) while the movement's window is not
     // over yet at now (seconds), else the history view of the window.
     function mapView(m, now) {
         const trace = traceParams(m);
-        const after = m.kind === 'arr' ? TRACE_AFTER_ARR_S : TRACE_AFTER_DEP_S;
+        const after = traceAfter(m);
         return now < m.t + after ? { live: true, params: { icao: trace.icao } } : { live: false, params: trace };
     }
 
@@ -144,33 +152,24 @@
             .slice(-NEW_MAX);
     }
 
-    // What RWY/WIND shows for a new movement: { end, kind, text }. The
-    // climb of a go-around ("ga" set on the departure) is kind 'ga'.
+    // What RWY/WIND shows for a new movement: { end, kind, text }. A
+    // go-around is kind 'ga' (OVER RWY) or 'missed' (ON FINAL: the final
+    // blinks, no aircraft).
     function pulseOf(m, timeZone) {
         const who = m.flight || (m.hex ? m.hex.toUpperCase() : '?');
         const at = hhmm(m.t, timeZone);
-        if (m.kind === 'dep' && m.ga) return { end: m.rwy, kind: 'ga', text: `GO-AROUND OVER RWY\n${who} RWY${m.rwy} ${at}` };
+        if (m.kind === 'ga') {
+            return { end: m.rwy, kind: m.final ? 'missed' : 'ga',
+                     text: `GO-AROUND ${m.final ? 'ON FINAL' : 'OVER RWY'}\n${who} RWY${m.rwy} ${at}` };
+        }
         return { end: m.rwy, kind: m.kind, text: `${who} ${m.kind.toUpperCase()} ${m.rwy} ${at}` };
     }
 
-    // The same for a go-around of go-arounds.json flown above the gate (it
-    // has no movements), or null for any other.
-    function missedPulse(g, timeZone) {
-        if (!g || !g.missed || typeof g.t !== 'number' || !g.rwy) return null;
-        const who = g.flight || (g.hex ? g.hex.toUpperCase() : '?');
-        return { end: g.rwy, kind: 'missed', text: `GO-AROUND ON FINAL\n${who} RWY${g.rwy} ${hhmm(g.t, timeZone)}` };
-    }
-
-    // The newest event for RWY/WIND's text when the page opens: the newest
-    // movement, or the newest go-around of gaDoc (go-arounds.json) when it
-    // is a missed approach above the gate flown after it. -> as pulseOf, or
-    // null.
-    function lastEvent(doc, gaDoc, timeZone) {
+    // The newest movement for RWY/WIND's text when the page opens -> as
+    // pulseOf, or null.
+    function lastEvent(doc, timeZone) {
         const rows = view(doc, 'ALL').rows;
         const m = rows.length ? rows.reduce((a, b) => (b.t > a.t ? b : a)) : null;
-        const g = gaDoc && Array.isArray(gaDoc.go_arounds) ? gaDoc.go_arounds[0] : null;
-        const missed = missedPulse(g, timeZone);
-        if (missed && (!m || g.t > m.t)) return missed;
         return m ? pulseOf(m, timeZone) : null;
     }
 
@@ -229,11 +228,11 @@
                 r.appendChild(s);
             }
             const ga = document.createElement('span');
-            ga.className = 'mv-ga';
-            if (m.ga) {
+            ga.className = 'mv-open';
+            if (m.kind === 'ga' && m.ga) {
                 const b = document.createElement('button');
-                b.textContent = 'G/A';
-                b.title = 'open this go-around';
+                b.textContent = '▸';
+                b.title = `open this go-around (${m.final ? 'ON FINAL' : 'OVER RWY'})`;
                 b.addEventListener('click', e => {
                     e.stopPropagation();
                     if (o.onGa) o.onGa(m.ga);
@@ -306,7 +305,7 @@
     }
 
     const Movements = {
-        mount, view, cells, traceParams, mapView, sameMovement, newMovements, pulseOf, missedPulse, lastEvent, hhmm, dayText,
+        mount, view, cells, traceParams, mapView, sameMovement, newMovements, pulseOf, lastEvent, hhmm, dayText,
         withDays, showingText,
     };
     if (typeof module !== 'undefined' && module.exports) {

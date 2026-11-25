@@ -212,10 +212,11 @@ Keep `state` and `history` on persistent storage (not `/run` or a tmpfs).
   category). It is the long-term record of traffic, e.g. for go-arounds per
   100 arrivals. It is only ever appended to; after the state is lost the
   rebuilt 24 hours are appended again, so dedupe by time, kind and hex.
-- `movements`: the arrivals and departures of the last 24 hours, newest
-  first, as JSON for the console's MOVEMENTS window (registration and type
-  with `aircraft_db`, and the go-around a movement belongs to). Written
-  next to `summary` unless set; `movements = ""` turns it off.
+- `movements`: the arrivals, departures and go-arounds of the last 24
+  hours, newest first, as JSON for the console's MOVEMENTS window
+  (registration and type with `aircraft_db`; a go-around is one row of
+  kind `ga`, not its arrival and climb). Written next to `summary` unless
+  set; `movements = ""` turns it off.
 - `aircraft_db`: the `db` directory of tar1090-db (gzipped JSON files named
   by hex prefix). tar1090's installer puts it at
   `/usr/local/share/tar1090/git-db/db` and keeps it up to date. Each

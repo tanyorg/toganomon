@@ -37,13 +37,15 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
     recorded movement is shown on its runway once, with its callsign; a
     go-around and a missed approach in amber.
   - **LAST 24H**: arrivals, departures, the runways in use (arrivals and
-    departures apart where they use different ones), go-arounds, the
+    departures apart where they use different ones), go-arounds (each
+    counted once, as a go-around, not as an arrival and a departure), the
     last go-around when there was none in 24 hours, and the aircraft the
     receiver saw.
   - **GO-AROUNDS**: every go-around; each opens to a north-up track figure.
-  - **MOVEMENTS**: the arrivals and departures of the last 24 hours with
-    callsign, type and registration; a row shows that flight's track on
-    the map, a G/A mark opens its go-around.
+  - **MOVEMENTS**: the arrivals, departures and go-arounds of the last 24
+    hours (ALL / ARR / DEP / G/A) with callsign, type and registration; a
+    row shows that flight's track on the map, a go-around's ▸ opens it in
+    GO-AROUNDS.
   - METAR and TAF in the header with the METAR's age (amber after 90
     minutes, red after 180) and an expired TAF marked; UTC and local
     clocks.
@@ -241,7 +243,8 @@ the Docker layout (`docker/nginx.conf`).
 
 - `summary.json`: aircraft received in the last 24 h, arrivals, departures,
   the runways in use (the last half hour, arrivals and departures apart),
-  go-arounds in the window.
+  go-arounds in the window. A go-around's arrival and climb are not
+  counted as an arrival and a departure.
 - `go-arounds.json`: every go-around, newest first, with the airport and
   runway geometry for drawing the tracks. `done` turns true once the entry
   is settled: its outcome no longer changes (an arrival that looked like a
@@ -254,13 +257,15 @@ the Docker layout (`docker/nginx.conf`).
   `nth` is 2 (3, ...) when the same airframe with the same callsign went
   around within the previous 2 hours. `reg` and `type` (ICAO type
   designator) come from the tar1090 aircraft database; null when unknown.
-- `movements.json`: the arrivals and departures of the last 24 h, newest
-  first, with registration, type and the go-around each belongs to (the
-  MOVEMENTS window).
+- `movements.json`: the arrivals, departures and go-arounds of the last
+  24 h, newest first, with registration and type (the MOVEMENTS window).
+  A go-around is one row of `kind` `ga` at its time, with `ga` its id and
+  `final` true when it was given up above the gate.
 - `movements.log`: one tab-separated line per arrival or departure: UTC
   time, `arr`/`dep`, runway, hex, callsign, ground speed (kt), emitter
   category. The long-term record of traffic, e.g. for go-arounds per 100
-  arrivals.
+  arrivals. It keeps every gate pass: a go-around through the gate is an
+  `arr` and a `dep` line here.
 - `events.log`: one line per go-around.
 
 In Docker, the JSON is served at `/toganomon/` and the logs are on the

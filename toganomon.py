@@ -20,7 +20,10 @@ for WINDOW_S, and writes a small JSON summary:
 "with_pos" counts aircraft that reported a position at least once in the
 window; "total" also includes Mode S-only aircraft. "runway" is the runway
 of the last movement; "runways" the runways in use, several at an airport
-that lands on some and takes off from others (runways_in_use).
+that lands on some and takes off from others (runways_in_use). Arrivals,
+departures and the runways leave out the arrival and the climb that make
+up a go-around (counted_movements): a go-around is counted once, as a
+go-around.
 
 Departures and arrivals come from readsb's per-aircraft traces (a point every
 few seconds, `--write-json-globe-index`; trace_recent of every aircraft near
@@ -51,8 +54,9 @@ tar1090-db directory) each go-around also gets the registration and type,
 looked up once. The movements JSON (next to the summary unless [paths]
 movements says otherwise; "" turns it off) lists the last 24 hours of
 movements, newest first, for the console's MOVEMENTS window (with the
-registration and type when aircraft_db is set, and the go-around each
-belongs to).
+registration and type when aircraft_db is set): arrivals, departures and
+one row per go-around (public_movements). The movements log keeps every
+gate pass, a go-around's arrival and climb included.
 
 Every go-around is also kept forever in the history file and published as
 the go-arounds JSON for the web view, with the METAR wind at detection time
@@ -1254,26 +1258,53 @@ def update_airframes(state, db_dir):
         del known[hx]
 
 
+def ga_movement_keys(gas):
+    """(hex, kind, t) of the arrival and the climb that make up each
+    go-around through the gate (a missed approach above it has neither)."""
+    keys = set()
+    for g in gas:
+        if g.get("missed"):
+            continue
+        keys.add((g.get("hex"), "dep", g.get("t")))
+        if g.get("arr_t") is not None:
+            keys.add((g.get("hex"), "arr", g.get("arr_t")))
+    return keys
+
+
+def counted_movements(state, cutoff):
+    """The movements since cutoff that are real arrivals and departures:
+    not the arrival and the climb of a go-around (summary, runways in use)."""
+    keys = ga_movement_keys(state.get("go_arounds", []))
+    return [m for m in state.get("movements", []) if m[0] >= cutoff and (m[3], m[1], m[0]) not in keys]
+
+
 def public_movements(state, history, now):
     """Movements JSON for the console: the last WINDOW_S, newest first, each
-    with the registration and type (null when unknown) and "ga", the id of
-    the go-around it belongs to (its arrival or its climb), or null."""
-    ga = {}
-    for h in history or []:
-        ga[(h.get("hex"), "dep", h.get("t"))] = h.get("id")
-        if h.get("arr_t") is not None:
-            ga[(h.get("hex"), "arr", h.get("arr_t"))] = h.get("id")
-    frames = state.get("airframes") or {}
+    with the registration and type (null when unknown). A go-around is one
+    row of kind "ga" at its time (instead of its arrival and climb): "ga" its
+    id (null without a history), "final" true when it was given up above the
+    gate (a missed approach), the arrival's ground speed. Arrivals and
+    departures have "ga" null."""
     cutoff = now - WINDOW_S
+    gas = [h for h in (history if history is not None else state.get("go_arounds", []))
+           if isinstance(h.get("t"), (int, float)) and h["t"] >= cutoff]
+    keys = ga_movement_keys(gas)
+    frames = state.get("airframes") or {}
     out = []
-    for m in reversed(state.get("movements", [])):
-        if m[0] < cutoff:
+    for m in state.get("movements", []):
+        if m[0] < cutoff or (m[3], m[1], m[0]) in keys:
             continue
         t, kind, rwy, hx = m[:4]
         flight, gs, cat = (list(m[4:7]) + [None] * 3)[:3]
         reg, typ = (frames.get(hx) or [None, None])[:2]
         out.append({"t": t, "kind": kind, "rwy": rwy, "hex": hx, "flight": flight, "gs": gs,
-                    "category": cat, "reg": reg, "type": typ, "ga": ga.get((hx, kind, t))})
+                    "category": cat, "reg": reg, "type": typ, "ga": None})
+    for g in gas:
+        reg, typ = (frames.get(g.get("hex")) or [None, None])[:2]
+        out.append({"t": g["t"], "kind": "ga", "rwy": g.get("rwy"), "hex": g.get("hex"), "flight": g.get("flight"),
+                    "gs": g.get("gs"), "category": g.get("category"), "reg": g.get("reg") or reg,
+                    "type": g.get("type") or typ, "ga": g.get("id"), "final": bool(g.get("missed"))})
+    out.sort(key=lambda r: r["t"], reverse=True)
     return {"now": now, "window_s": WINDOW_S, "movements": out}
 
 
@@ -1300,7 +1331,7 @@ def runways_in_use(moves, now):
 def summary(state, now):
     cutoff = now - WINDOW_S
     ac = state["aircraft"].values()
-    moves = [m for m in state.get("movements", []) if m[0] >= cutoff]
+    moves = counted_movements(state, cutoff)
     gas = sorted((g for g in state.get("go_arounds", []) if g["t"] >= cutoff), key=lambda g: g["t"])
     return {
         "now": now,
