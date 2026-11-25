@@ -172,14 +172,46 @@
             view.show(id);
         },
         // each new movement lands or takes off on the WIND dial, one by one
-        onNew: list => list.forEach((m, i) => setTimeout(() => wind.pulse(m.rwy, m.kind), i * 900)),
+        // the last event's text when the page opens, then each new one
+        onFirst: async doc => {
+            let gaDoc = null;
+            try {
+                const res = await fetch(DATA + 'go-arounds.json', { cache: 'no-store' });
+                if (res.ok) gaDoc = await res.json();
+            } catch (e) {
+                gaDoc = null;
+            }
+            const e = Movements.lastEvent(doc, gaDoc, timeZone);
+            if (e) wind.note(e.kind, e.text);
+        },
+        onNew: list => list.forEach((m, i) => setTimeout(() => {
+            const p = Movements.pulseOf(m, timeZone);
+            wind.pulse(p.end, p.kind, p.text);
+        }, i * 900)),
     });
+    // A missed approach above the gate has no movements: when the go-arounds
+    // go up, show the newest on RWY/WIND if it is one (once).
+    const missedShown = new Set();
+    async function pulseMissed() {
+        try {
+            const res = await fetch(DATA + 'go-arounds.json', { cache: 'no-store' });
+            const g = res.ok ? ((await res.json()).go_arounds || [])[0] : null;
+            const p = Movements.missedPulse(g, timeZone);
+            if (p && !missedShown.has(g.id)) {
+                missedShown.add(g.id);
+                wind.pulse(p.end, p.kind, p.text);
+            }
+        } catch (e) {
+            // nothing to show
+        }
+    }
     stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,
         onGa: () => ga.toggle(),
         onIncrease: () => {
             view.refresh();
             if (chimeOn) GoAroundView.chime();
+            pulseMissed();
         },
         onRunway: rwy => wind.update({ runway: rwy }),
     });

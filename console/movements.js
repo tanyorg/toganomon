@@ -10,6 +10,7 @@
 //       onGa(id) {},        // the G/A mark of a row was clicked (go-around id)
 //       onNew(list) {},     // movements recorded since the last poll, oldest
 //                           // first (Movements.newMovements); not on the first
+//       onFirst(doc) {},    // the first movements.json read (Movements.lastEvent)
 //   });
 //   -> { refresh(), stop() }
 //
@@ -143,13 +144,43 @@
             .slice(-NEW_MAX);
     }
 
+    // What RWY/WIND shows for a new movement: { end, kind, text }. The
+    // climb of a go-around ("ga" set on the departure) is kind 'ga'.
+    function pulseOf(m, timeZone) {
+        const who = m.flight || (m.hex ? m.hex.toUpperCase() : '?');
+        const at = hhmm(m.t, timeZone);
+        if (m.kind === 'dep' && m.ga) return { end: m.rwy, kind: 'ga', text: `GO-AROUND\n${who} RWY${m.rwy} ${at}` };
+        return { end: m.rwy, kind: m.kind, text: `${who} ${m.kind.toUpperCase()} ${m.rwy} ${at}` };
+    }
+
+    // The same for a go-around of go-arounds.json flown above the gate (it
+    // has no movements), or null for any other.
+    function missedPulse(g, timeZone) {
+        if (!g || !g.missed || typeof g.t !== 'number' || !g.rwy) return null;
+        const who = g.flight || (g.hex ? g.hex.toUpperCase() : '?');
+        return { end: g.rwy, kind: 'missed', text: `MISSED APPROACH\n${who} RWY${g.rwy} ${hhmm(g.t, timeZone)}` };
+    }
+
+    // The newest event for RWY/WIND's text when the page opens: the newest
+    // movement, or the newest go-around of gaDoc (go-arounds.json) when it
+    // is a missed approach above the gate flown after it. -> as pulseOf, or
+    // null.
+    function lastEvent(doc, gaDoc, timeZone) {
+        const rows = view(doc, 'ALL').rows;
+        const m = rows.length ? rows.reduce((a, b) => (b.t > a.t ? b : a)) : null;
+        const g = gaDoc && Array.isArray(gaDoc.go_arounds) ? gaDoc.go_arounds[0] : null;
+        const missed = missedPulse(g, timeZone);
+        if (missed && (!m || g.t > m.t)) return missed;
+        return m ? pulseOf(m, timeZone) : null;
+    }
+
     function sameMovement(a, b) {
         return !!a && !!b && a.t === b.t && a.kind === b.kind && a.hex === b.hex;
     }
 
     function mount(el, options) {
         const o = Object.assign({
-            url: 'movements.json', pollMs: 60000, timeZone: 'UTC', onSelect: null, onGa: null, onNew: null,
+            url: 'movements.json', pollMs: 60000, timeZone: 'UTC', onSelect: null, onGa: null, onNew: null, onFirst: null,
         }, options || {});
         let doc = null, filter = 'ALL', selected = null, selectedView = null, timer = null;
         el.classList.add('mv-view');
@@ -255,6 +286,7 @@
                 const prev = doc;
                 doc = await res.json();
                 render();
+                if (!prev && o.onFirst) o.onFirst(doc);
                 const fresh = newMovements(prev, doc);
                 if (fresh.length && o.onNew) o.onNew(fresh);
             } catch (e) {
@@ -273,7 +305,10 @@
         return { refresh, stop };
     }
 
-    const Movements = { mount, view, cells, traceParams, mapView, sameMovement, newMovements, hhmm, dayText, withDays, showingText };
+    const Movements = {
+        mount, view, cells, traceParams, mapView, sameMovement, newMovements, pulseOf, missedPulse, lastEvent, hhmm, dayText,
+        withDays, showingText,
+    };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Movements;
         return;

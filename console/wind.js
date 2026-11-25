@@ -1,16 +1,19 @@
-// toganomon console: the WIND window. The METAR wind over a compass with the
-// airport's runways where they are (centre, length and true track from
-// go-arounds.json's airport block; METAR wind is true as well), small
-// chevrons drifting downwind, and the head/cross components on the runways
-// in use, the same way toganomon.py computes them for a go-around. A runway
-// in use is blue for arrivals, green for departures, amber for both, with a
-// small triangle along the direction of use.
-// Wind.mount(element) builds the whole panel (dial and text) and returns
-// { update({ metar, airport, runway }), pulse(end, kind) }: pass any of the
-// three as they come; runway is { arr: [...], dep: [...] } (Stats'
-// onRunway), a designator, a list of them or null. pulse: a movement was
-// recorded ('arr' or 'dep' on that runway end); a small aircraft lands or
-// takes off there once.
+// toganomon console: the RWY/WIND window. The airport's runways where they
+// are (centre, length and true track from go-arounds.json's airport block),
+// north up, in a rounded square; the METAR wind (true, as the tracks) as
+// small chevrons drifting downwind (turning slowly round for VRB), its
+// direction and speed on one line, and the head/cross components on the
+// runways in use, the same way toganomon.py computes them for a go-around. A runway in use is blue for
+// arrivals, green for departures, amber for both, with a small triangle
+// along the direction of use.
+// Wind.mount(element) builds the whole panel and returns
+// { update({ metar, airport, runway }), pulse(end, kind, text), note(kind,
+// text) }: pass any of
+// the three as they come; runway is { arr: [...], dep: [...] } (Stats'
+// onRunway), a designator, a list of them or null. pulse: something was
+// recorded on that runway end (Wind.pulse has the kinds), shown once on the
+// diagram with text (Movements.pulseOf, Movements.missedPulse) under it;
+// note: the text only (the last event when the page opens).
 // Everything but Wind.draw and Wind.mount is DOM-free (tests/console_test.js).
 (function (root) {
     'use strict';
@@ -102,14 +105,14 @@
         return [Math.sin(a) * r, -Math.cos(a) * r];
     }
 
-    // The runways on the dial (radius r): where they are, scaled so that the
-    // airport fits within r - LAYOUT_MARGIN, north up; through the middle at
+    // The runways on the diagram (half size r): where they are, scaled so
+    // that the airport fits within r - LAYOUT_MARGIN of the middle, north up; through the middle at
     // their true tracks when a runway has no centre. -> { runways: [{ ends,
     // a, b }], ends: { name: { thr, far, track, label } } }: a / b the ends[0]
     // / ends[1] thresholds; per end its threshold, the far end, the track
     // flown and its name's place just beyond the threshold, names pushed
     // apart to LABEL_GAP where two meet (RJTT: 22 next to 16L).
-    const LAYOUT_MARGIN = 26;
+    const LAYOUT_MARGIN = 15;
     const LABEL_OUT = 8;
     const LABEL_GAP = 13;
     function layout(airport, r) {
@@ -160,7 +163,7 @@
         return { runways: segs.map(g => ({ ends: g.x.ends, a: g.a, b: g.b })), ends };
     }
 
-    // One cycle of the drifting chevrons across the dial, in seconds:
+    // One cycle of the drifting chevrons across the diagram, in seconds:
     // faster in a stronger wind (14 kt about 2.2 s, 3 kt about 5.7 s)
     function flowSeconds(wind) {
         const kt = wind.unit === 'm/s' ? wind.spd * 1.944 : wind.spd;
@@ -209,9 +212,11 @@
     }
     root.Wind = Wind;
 
-    // ---------- SVG dial ----------
+    // ---------- SVG diagram ----------
     const NS = 'http://www.w3.org/2000/svg';
-    const R = 60;
+    const R = 60;                   // the runways' scale (layout)
+    const H = R + 2;                // half the rounded square
+    const FLOW = 88;                // the chevrons' travel, corner to corner
     const PLANE = 'M 0 -5 L 1 -1 L 5 1 L 5 2 L 1 1 L 0.6 4 L 2 5 L -2 5 L -0.6 4 L -1 1 L -5 2 L -5 1 L -1 -1 Z';
     let clipSeq = 0;
 
@@ -228,51 +233,69 @@
 
     const fix = v => v.toFixed(1);
 
-    // Small chevrons drifting downwind, five lanes, under the runways; still
-    // (spread over the dial) for reduced motion.
-    function drawFlow(svg, wind) {
+    // a clip path of the square's inside; -> 'url(#id)'
+    function squareClip(svg) {
         const id = 'wind-clip-' + (++clipSeq);
         const cp = el('clipPath', { id });
-        cp.appendChild(el('circle', { r: R - 2 }));
+        cp.appendChild(el('rect', { x: -H + 1, y: -H + 1, width: 2 * H - 2, height: 2 * H - 2, rx: 9 }));
         svg.appendChild(cp);
-        const flow = el('g', { 'clip-path': `url(#${id})`, class: 'wind-flow' });
-        const g = el('g', { transform: `rotate(${wind.dir})` });
-        const dur = flowSeconds(wind), still = reducedMotion(), PER = 3;
-        [-40, -20, 0, 20, 40].forEach((x, lane) => {
+        return `url(#${id})`;
+    }
+
+    // Small chevrons drifting downwind, nine lanes, under the runways; still
+    // (spread over the square) for reduced motion. A variable wind (VRB):
+    // the whole drift turns slowly round (none for reduced motion, as a
+    // still one would show a direction).
+    const VRB_TURN_S = 40;
+    function drawFlow(svg, wind, clip) {
+        const still = reducedMotion();
+        if (wind.vrb && still) return;
+        const flow = el('g', { 'clip-path': clip, class: 'wind-flow' + (wind.vrb ? ' vrb' : '') });
+        const turn = el('g', {});
+        if (wind.vrb) {
+            turn.appendChild(el('animateTransform', {
+                attributeName: 'transform', type: 'rotate', from: '0', to: '360', dur: `${VRB_TURN_S}s`, repeatCount: 'indefinite',
+            }));
+        }
+        const g = el('g', { transform: `rotate(${wind.vrb ? 0 : wind.dir})` });
+        const dur = flowSeconds(wind), PER = 3;
+        [-80, -60, -40, -20, 0, 20, 40, 60, 80].forEach((x, lane) => {
             for (let i = 0; i < PER; i++) {
                 const c = el('path', { d: `M ${x - 4} -3 L ${x} 2 L ${x + 4} -3` });
                 const phase = (i + (lane % 2) * 0.5) / PER;     // lanes out of step
                 if (still) {
-                    c.setAttribute('transform', `translate(0 ${fix(-R + phase * 2 * R)})`);
+                    c.setAttribute('transform', `translate(0 ${fix(-FLOW + phase * 2 * FLOW)})`);
                 } else {
                     c.appendChild(el('animateTransform', {
-                        attributeName: 'transform', type: 'translate', from: `0 ${-R}`, to: `0 ${R}`,
+                        attributeName: 'transform', type: 'translate', from: `0 ${-FLOW}`, to: `0 ${FLOW}`,
                         dur: `${dur.toFixed(2)}s`, begin: `${(-phase * dur).toFixed(2)}s`, repeatCount: 'indefinite',
                     }));
                 }
                 g.appendChild(c);
             }
         });
-        flow.appendChild(g);
+        turn.appendChild(g);
+        flow.appendChild(turn);
         svg.appendChild(flow);
     }
 
-    // Draw into an <svg> (viewBox -70 -70 140 140): dial, wind, runways.
-    // Returns the layout (Wind.mount's pulse uses it).
+    // Draw into an <svg> (viewBox Wind.VIEWBOX): the square, the variable
+    // sector, the wind, the runways. Returns the layout (for Wind.pulse).
+    Wind.VIEWBOX = '-62.75 -62.75 125.5 125.5';
     Wind.draw = function (svg, wind, airport, runway) {
         svg.textContent = '';
-        svg.appendChild(el('circle', { r: R, class: 'wind-dial' }));
-        for (const [d, l] of [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']]) {
-            const [x, y] = at(d, R - 9);
-            svg.appendChild(el('text', { x, y, class: 'wind-cardinal' }, l));
-        }
+        svg.appendChild(el('rect', { x: -H, y: -H, width: 2 * H, height: 2 * H, rx: 10, class: 'wind-dial' }));
+        const clip = squareClip(svg);
         if (wind && wind.varFrom !== null) {
-            // variable sector, on the rim
-            const [x1, y1] = at(wind.varFrom, R), [x2, y2] = at(wind.varTo, R);
+            // the variable sector: a faint wedge from the middle
+            const RR = 90, [x1, y1] = at(wind.varFrom, RR), [x2, y2] = at(wind.varTo, RR);
             const sweep = ((wind.varTo - wind.varFrom + 360) % 360) > 180 ? 1 : 0;
-            svg.appendChild(el('path', { d: `M ${x1} ${y1} A ${R} ${R} 0 ${sweep} 1 ${x2} ${y2}`, class: 'wind-var' }));
+            svg.appendChild(el('path', {
+                d: `M 0 0 L ${fix(x1)} ${fix(y1)} A ${RR} ${RR} 0 ${sweep} 1 ${fix(x2)} ${fix(y2)} Z`,
+                class: 'wind-var', 'clip-path': clip,
+            }));
         }
-        if (wind && wind.dir !== null && !wind.calm) drawFlow(svg, wind);
+        if (wind && !wind.calm && (wind.dir !== null || wind.vrb)) drawFlow(svg, wind, clip);
         const lay = layout(airport, R);
         for (const { a, b } of lay.runways) {
             svg.appendChild(el('line', { x1: fix(a[0]), y1: fix(a[1]), x2: fix(b[0]), y2: fix(b[1]), class: 'wind-rwy' }));
@@ -302,51 +325,78 @@
         return lay;
     };
 
-    // One recorded movement on the dial drawn with lay: the runway glows, a
-    // small aircraft comes in over the threshold and slows down (arr) or
-    // rolls and climbs away beyond the far end (dep); the glow only for
-    // reduced motion.
-    const PULSE_S = 2.6;
+    // One recorded event on a diagram drawn with lay, shown once. kind:
+    //   arr     a small aircraft comes down to the threshold (what is
+    //           recorded is the gate pass, not the touchdown) - blue
+    //   dep     it rolls and climbs away beyond the far end - green
+    //   ga      it comes down, carries on low along the runway and climbs
+    //           away beyond the far end - amber
+    //   missed  given up kilometres out, off this scale: no aircraft, the
+    //           final before the threshold blinks - amber
+    // The runway glows; a climbing aircraft grows (nearer the viewer).
+    // Reduced motion: the glow (and the final) only.
+    const PULSE_S = { arr: 2.6, dep: 2.6, ga: 4.2, missed: 4.2 };
+    const PULSE_PATH = {          // [units from the threshold, size] ...
+        arr: [[-22, 1], [-8, 0.9], [0, 0.8]],
+        dep: [[2, 0.8], [L => L * 0.7, 0.8], [L => L + 18, 1.3]],
+        ga: [[-22, 1], [0, 0.8], [L => L * 0.6, 0.8], [L => L + 22, 1.5]],
+    };
+    const PULSE_TIMES = { arr: '0;0.6;1', dep: '0;0.6;1', ga: '0;0.3;0.6;1' };
     Wind.pulse = function (svg, lay, end, kind) {
         const e = lay && lay.ends[end];
-        if (!e || (kind !== 'arr' && kind !== 'dep')) return;
+        if (!e || !PULSE_S[kind]) return;
+        const dur = PULSE_S[kind], cls = kind === 'missed' ? 'ga' : kind;
         const len = Math.hypot(e.far[0] - e.thr[0], e.far[1] - e.thr[1]) || 1;
         const u = [(e.far[0] - e.thr[0]) / len, (e.far[1] - e.thr[1]) / len];
-        const along = (p, k) => [p[0] + u[0] * k, p[1] + u[1] * k];
-        const anims = [];
+        const along = k => [e.thr[0] + u[0] * k, e.thr[1] + u[1] * k];
+        const still = reducedMotion();
+        const anims = [], added = [];
         const animate = (parent, name, attrs) => {
-            const a = el(name, Object.assign({ begin: 'indefinite', dur: PULSE_S + 's', fill: 'freeze' }, attrs));
+            const a = el(name, Object.assign({ begin: 'indefinite', dur: dur + 's', fill: 'freeze' }, attrs));
             parent.appendChild(a);
             anims.push(a);
         };
+        const under = svg.querySelector('.wind-dir-mark, .wind-rwy-name');
         const glow = el('line', {
-            x1: fix(e.thr[0]), y1: fix(e.thr[1]), x2: fix(e.far[0]), y2: fix(e.far[1]), class: 'wind-rwy-glow ' + kind,
+            x1: fix(e.thr[0]), y1: fix(e.thr[1]), x2: fix(e.far[0]), y2: fix(e.far[1]), class: 'wind-rwy-glow ' + cls,
         });
-        svg.insertBefore(glow, svg.querySelector('.wind-dir-mark, .wind-rwy-name'));
-        animate(glow, 'animate', { attributeName: 'opacity', values: '0.9;0.9;0', keyTimes: '0;0.5;1' });
-        let plane = null;
-        if (!reducedMotion()) {
-            const [from, to, spline] = kind === 'arr'
-                ? [along(e.thr, -18), along(e.thr, len * 0.45), '0 0 0.4 1']
-                : [along(e.thr, 2), along(e.far, 16), '0.6 0 1 1'];
-            plane = el('g', { class: 'wind-plane ' + kind, opacity: 0 });
-            plane.appendChild(el('path', { d: PLANE, transform: `rotate(${e.track})` }));
+        svg.insertBefore(glow, under);
+        added.push(glow);
+        animate(glow, 'animate', { attributeName: 'opacity', values: '0.9;0.9;0', keyTimes: '0;0.6;1' });
+        if (kind === 'missed') {
+            const out = along(-26);
+            const fin = el('line', { x1: fix(out[0]), y1: fix(out[1]), x2: fix(e.thr[0]), y2: fix(e.thr[1]), class: 'wind-final' });
+            svg.insertBefore(fin, under);
+            added.push(fin);
+            animate(fin, 'animate', still
+                ? { attributeName: 'opacity', values: '0.9;0.9;0', keyTimes: '0;0.7;1' }
+                : { attributeName: 'opacity', values: '0;0.9;0.2;0.9;0.2;0.9;0', keyTimes: '0;0.12;0.3;0.45;0.6;0.75;1' });
+        } else if (!still) {
+            const path = PULSE_PATH[kind].map(([k, z]) => [along(typeof k === 'function' ? k(len) : k), z]);
+            const plane = el('g', { class: 'wind-plane ' + cls, opacity: 0 });
+            const size = el('g', {});
+            size.appendChild(el('path', { d: PLANE, transform: `rotate(${e.track})` }));
+            plane.appendChild(size);
             svg.appendChild(plane);
+            added.push(plane);
             animate(plane, 'animateTransform', {
-                attributeName: 'transform', type: 'translate', keyTimes: '0;1', calcMode: 'spline', keySplines: spline,
-                values: `${fix(from[0])} ${fix(from[1])};${fix(to[0])} ${fix(to[1])}`,
+                attributeName: 'transform', type: 'translate', keyTimes: PULSE_TIMES[kind],
+                values: path.map(([p]) => `${fix(p[0])} ${fix(p[1])}`).join(';'),
             });
-            animate(plane, 'animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.12;0.8;1' });
+            animate(size, 'animateTransform', {
+                attributeName: 'transform', type: 'scale', keyTimes: PULSE_TIMES[kind], values: path.map(([, z]) => z).join(';'),
+            });
+            animate(plane, 'animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.1;0.85;1' });
         }
         for (const a of anims) if (typeof a.beginElement === 'function') a.beginElement();
-        setTimeout(() => {
-            glow.remove();
-            if (plane) plane.remove();
-        }, PULSE_S * 1000 + 200);
+        setTimeout(() => added.forEach(x => x.remove()), dur * 1000 + 200);
     };
 
-    // The WIND panel: dial, direction, speed, gust badge, variable sector,
-    // head/cross components. Styles: wind.css.
+    // The RWY/WIND panel: the diagram, direction and speed, gust badge,
+    // variable sector, head/cross components, and the text of the last event,
+    // kept until the next one (what happened last, at a glance).
+    // Styles: wind.css.
+    const EVENT_KINDS = ['arr', 'dep', 'ga', 'missed'];
     Wind.mount = function (container) {
         const div = (cls) => {
             const d = document.createElement('div');
@@ -354,9 +404,14 @@
             return d;
         };
         container.classList.add('wind-panel');
-        const svg = el('svg', { class: 'wind-svg', viewBox: '-70 -70 140 140', role: 'img', 'aria-label': 'wind and runways' });
-        const dir = div('wind-dir'), spd = div('wind-spd'), gust = div('wind-gust-line'), vr = div('wind-var-text'), comp = div('wind-comp');
-        container.replaceChildren(svg, dir, spd, gust, vr, comp);
+        const svg = el('svg', { class: 'wind-svg', viewBox: Wind.VIEWBOX, role: 'img', 'aria-label': 'runways and wind' });
+        const head = div('wind-head'), dir = div('wind-dir'), spd = div('wind-spd');
+        head.append(dir, spd);
+        const gust = div('wind-gust-line'), vr = div('wind-var-text'), comp = div('wind-comp');
+        // two lines kept free, so that the window does not change its size
+        const ev = div('wind-event');
+        ev.setAttribute('aria-live', 'polite');
+        container.replaceChildren(svg, head, gust, vr, comp, ev);
         const st = { metar: null, airport: null, runway: null };
         let lay = null;
 
@@ -379,9 +434,19 @@
             comp.textContent = windLines(w, st.airport, st.runway).join('\n');
         }
 
+        function note(kind, text) {
+            if (!text || !EVENT_KINDS.includes(kind)) return;
+            ev.textContent = text;
+            ev.className = 'wind-event on ' + (kind === 'missed' ? 'ga' : kind);
+        }
+
         render();
         return {
-            pulse(end, kind) { Wind.pulse(svg, lay, end, kind); },
+            pulse(end, kind, text) {
+                Wind.pulse(svg, lay, end, kind);
+                note(kind, text);
+            },
+            note,
             update(part) {
                 let changed = false;
                 for (const k of ['metar', 'airport', 'runway']) {

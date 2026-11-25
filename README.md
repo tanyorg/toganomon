@@ -29,10 +29,11 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
   happened next (landed / went around again / did not land), the
   registration and type, and a thinned track.
 - **The console**, one page with floating windows over the tar1090 map:
-  - **WIND**: the METAR wind over a compass with the runways where they are,
-    the runways in use (arrivals blue, departures green), a small aircraft
-    landing or taking off there as each movement is recorded, gust,
-    variable sector and the components on the runways in use.
+  - **RWY/WIND**: the runways where they are, the ones in use (arrivals
+    blue, departures green), the METAR wind drifting across them, its
+    gust, variable sector and the components on the runways in use. Each
+    recorded movement is shown on its runway once, with its callsign; a
+    go-around and a missed approach in amber.
   - **LAST 24H**: arrivals, departures, the runways in use (arrivals and
     departures apart where they use different ones), go-arounds, the
     last go-around when there was none in 24 hours, and the aircraft the
