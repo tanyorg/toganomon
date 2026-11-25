@@ -284,10 +284,10 @@ t('Movements.pulseOf / missedPulse: what RWY/WIND shows', () => {
         '86951C DEP 34 14:46');
     // the climb of a go-around
     assert.deepStrictEqual(M.pulseOf({ t, kind: 'dep', rwy: '16', flight: 'AAR132', hex: '71c510', ga: 'x' }, 'Asia/Tokyo'),
-        { end: '16', kind: 'ga', text: 'GO-AROUND\nAAR132 RWY16 14:46' });
+        { end: '16', kind: 'ga', text: 'GO-AROUND OVER RWY\nAAR132 RWY16 14:46' });
     // a missed approach above the gate, from go-arounds.json; nothing for another go-around
     const g = { id: 'a', t, rwy: '16', flight: 'TWB207', hex: '71c0a1', missed: { low_ft: 980, km: 7.5 } };
-    assert.deepStrictEqual(M.missedPulse(g, 'Asia/Tokyo'), { end: '16', kind: 'missed', text: 'MISSED APPROACH\nTWB207 RWY16 14:46' });
+    assert.deepStrictEqual(M.missedPulse(g, 'Asia/Tokyo'), { end: '16', kind: 'missed', text: 'GO-AROUND ON FINAL\nTWB207 RWY16 14:46' });
     assert.strictEqual(M.missedPulse({ ...g, missed: null }, 'Asia/Tokyo'), null);
     assert.strictEqual(M.missedPulse(null, 'Asia/Tokyo'), null);
 });

@@ -149,7 +149,7 @@
     function pulseOf(m, timeZone) {
         const who = m.flight || (m.hex ? m.hex.toUpperCase() : '?');
         const at = hhmm(m.t, timeZone);
-        if (m.kind === 'dep' && m.ga) return { end: m.rwy, kind: 'ga', text: `GO-AROUND\n${who} RWY${m.rwy} ${at}` };
+        if (m.kind === 'dep' && m.ga) return { end: m.rwy, kind: 'ga', text: `GO-AROUND OVER RWY\n${who} RWY${m.rwy} ${at}` };
         return { end: m.rwy, kind: m.kind, text: `${who} ${m.kind.toUpperCase()} ${m.rwy} ${at}` };
     }
 
@@ -158,7 +158,7 @@
     function missedPulse(g, timeZone) {
         if (!g || !g.missed || typeof g.t !== 'number' || !g.rwy) return null;
         const who = g.flight || (g.hex ? g.hex.toUpperCase() : '?');
-        return { end: g.rwy, kind: 'missed', text: `MISSED APPROACH\n${who} RWY${g.rwy} ${hhmm(g.t, timeZone)}` };
+        return { end: g.rwy, kind: 'missed', text: `GO-AROUND ON FINAL\n${who} RWY${g.rwy} ${hhmm(g.t, timeZone)}` };
     }
 
     // The newest event for RWY/WIND's text when the page opens: the newest

@@ -25,7 +25,8 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 - **Missed approaches.** An approach given up before the gate counts too:
   the aircraft comes down a final to 2000 ft or lower and climbs 500 ft
   again within 4 minutes. It never passes the gate, so there is no
-  arrival.
+  arrival. The console calls both go-arounds and tells them apart as
+  OVER RWY (through the gate) and ON FINAL (given up before it).
 - Each go-around is kept with the METAR wind and its head/cross
   components, what happened next (landed / went around again / did not
   land), the registration and type, and a thinned track.
