@@ -468,7 +468,9 @@ class GoAround(unittest.TestCase):
         s = cs.summary(st, T0 + 360)
         self.assertEqual(s["go_arounds"], 1)
         self.assertEqual(s["last_go_around"]["flight"], "HGB308")
-        self.assertEqual((s["arrivals"], s["departures"]), (1, 1))
+        # the go-around's arrival and climb are not counted as such
+        self.assertEqual((s["arrivals"], s["departures"]), (0, 0))
+        self.assertEqual(s["runways"], {"arr": [], "dep": []})
         # gone after 24 hours
         later = T0 + cs.WINDOW_S + 400
         cs.record_movements(st, "", [], later)
@@ -842,15 +844,38 @@ class MovementsOut(unittest.TestCase):
             st = self.state()
             cs.update_airframes(st, d)
             self.assertEqual(st["airframes"], {"8681b7": ["JA73NR", "B738"], "87cde5": ["58-1219", "KC2"]})
-            hist = [{"id": "8681b7-1800000120", "hex": "8681b7", "t": T0 + 120, "arr_t": T0}]
+            hist = [{"id": "8681b7-1800000120", "hex": "8681b7", "t": T0 + 120, "arr_t": T0, "rwy": "16",
+                     "flight": "ANA240", "gs": 140, "category": "A3"}]
             doc = cs.public_movements(st, hist, T0 + 1000)
         self.assertEqual(doc["window_s"], cs.WINDOW_S)
         m = doc["movements"]
-        self.assertEqual([x["t"] for x in m], [T0 + 900, T0 + 600, T0 + 120, T0])
+        # the go-around's arrival and climb are one "ga" row at its time
+        self.assertEqual([(x["t"], x["kind"]) for x in m], [(T0 + 900, "dep"), (T0 + 600, "arr"), (T0 + 120, "ga")])
         self.assertEqual(m[0], {"t": T0 + 900, "kind": "dep", "rwy": "34", "hex": "87cde5", "flight": "CJ01",
                                 "gs": 160, "category": "A5", "reg": "58-1219", "type": "KC2", "ga": None})
         self.assertEqual((m[1]["flight"], m[1]["reg"], m[1]["ga"]), (None, None, None))
-        self.assertEqual([x["ga"] for x in m[2:]], ["8681b7-1800000120"] * 2)
+        self.assertEqual(m[2], {"t": T0 + 120, "kind": "ga", "rwy": "16", "hex": "8681b7", "flight": "ANA240",
+                                "gs": 140, "category": "A3", "reg": "JA73NR", "type": "B738",
+                                "ga": "8681b7-1800000120", "final": False})
+
+    def test_missed_approach_row(self):
+        # given up above the gate: no movements of its own, one "ga" row
+        hist = [{"id": "8681b7-1800000300", "hex": "8681b7", "t": T0 + 300, "arr_t": T0 + 280, "rwy": "16",
+                 "flight": "SKY508", "gs": 142, "category": "A3", "reg": "JA738A", "type": "B38M",
+                 "missed": {"low_ft": 1031, "km": 6.7}}]
+        st = {"movements": [[T0 + 900, "arr", "16", "8681b7", "SKY508", 131, "A3"]]}
+        m = cs.public_movements(st, hist, T0 + 1000)["movements"]
+        self.assertEqual([(x["t"], x["kind"]) for x in m], [(T0 + 900, "arr"), (T0 + 300, "ga")])
+        self.assertEqual((m[1]["final"], m[1]["ga"], m[1]["reg"]), (True, "8681b7-1800000300", "JA738A"))
+        st["go_arounds"] = hist
+        s = cs.summary({**st, "aircraft": {}, "started": T0}, T0 + 1000)
+        self.assertEqual((s["arrivals"], s["go_arounds"]), (1, 1))     # the landing still counts
+
+    def test_go_around_from_state_without_history(self):
+        st = self.state()
+        st["go_arounds"] = [{"hex": "8681b7", "t": T0 + 120, "arr_t": T0, "rwy": "16", "flight": "ANA240"}]
+        m = cs.public_movements(st, None, T0 + 1000)["movements"]
+        self.assertEqual([(x["kind"], x["ga"]) for x in m], [("dep", None), ("arr", None), ("ga", None)])
 
     def test_airframes_follow_the_movements(self):
         with tempfile.TemporaryDirectory() as d:
@@ -865,7 +890,7 @@ class MovementsOut(unittest.TestCase):
         self.assertEqual(st["airframes"], {"8681b7": ["kept", "B738"]})
 
     def test_window_and_no_history(self):
-        doc = cs.public_movements(self.state(), None, T0 + cs.WINDOW_S + 300)
+        doc = cs.public_movements(self.state(), [], T0 + cs.WINDOW_S + 300)
         self.assertEqual([x["t"] for x in doc["movements"]], [T0 + 900, T0 + 600])
         self.assertEqual(cs.public_movements({}, [], T0)["movements"], [])
 
