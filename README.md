@@ -21,13 +21,14 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 - **Go-arounds.** An arrival through a runway gate (low, on the extended
   centreline, heading along the runway) followed by a departure of the same
   aircraft on the same runway within 10 minutes. A departure needs a real
-  climb (200 ft within 30 s), so a gusty final does not fake one. An
-  approach given up higher up counts too (a **missed approach**): down a
-  final to 2000 ft or lower, then up 500 ft within 4 minutes, without an
-  arrival. Each
-  go-around is kept with the METAR wind and its head/cross components, what
-  happened next (landed / went around again / did not land), the
-  registration and type, and a thinned track.
+  climb (200 ft within 30 s), so a gusty final does not fake one.
+- **Missed approaches.** An approach given up before the gate counts too:
+  the aircraft comes down a final to 2000 ft or lower and climbs 500 ft
+  again within 4 minutes. It never passes the gate, so there is no
+  arrival.
+- Each go-around is kept with the METAR wind and its head/cross
+  components, what happened next (landed / went around again / did not
+  land), the registration and type, and a thinned track.
 - **The console**, one page with floating windows over the tar1090 map:
   - **RWY/WIND**: the runways where they are, the ones in use (arrivals
     blue, departures green), the METAR wind drifting across them, its
@@ -199,9 +200,15 @@ cd toganomon && git pull
 cd docker && docker compose pull --ignore-buildable && docker compose up -d --build
 ```
 
-That follows `main`. To stay on a release instead, check out its tag
-(`git checkout v0.1.0`, then the same `docker compose up -d --build`); the
-[releases](https://github.com/tanyorg/toganomon/releases) say what changed.
+That follows `main`. To stay on a release instead, check out its tag, then
+run the same `docker compose up -d --build`:
+
+```sh
+git fetch --tags
+git checkout "$(git describe --tags --abbrev=0 origin/main)"   # the latest release
+```
+
+The [releases](https://github.com/tanyorg/toganomon/releases) say what changed.
 Until 1.0, a new minor version (0.2.0) may change the detection or the JSON
 output; a patch (0.1.1) only fixes bugs.
 
