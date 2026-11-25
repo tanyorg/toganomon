@@ -246,7 +246,7 @@
     // (spread over the square) for reduced motion. A variable wind (VRB):
     // the whole drift turns slowly round (none for reduced motion, as a
     // still one would show a direction).
-    const VRB_TURN_S = 40;
+    const VRB_TURN_S = 60;
     function drawFlow(svg, wind, clip) {
         const still = reducedMotion();
         if (wind.vrb && still) return;
