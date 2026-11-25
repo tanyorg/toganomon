@@ -244,9 +244,11 @@
 
     // Small chevrons drifting downwind, nine lanes, under the runways; still
     // (spread over the square) for reduced motion. A variable wind (VRB):
-    // the whole drift turns slowly round (none for reduced motion, as a
-    // still one would show a direction).
+    // the whole drift turns slowly round and drifts at half the speed, so it
+    // is calm to look at (none for reduced motion, as a still one would show
+    // a direction).
     const VRB_TURN_S = 120;
+    const VRB_SLOWER = 2;
     function drawFlow(svg, wind, clip) {
         const still = reducedMotion();
         if (wind.vrb && still) return;
@@ -258,7 +260,7 @@
             }));
         }
         const g = el('g', { transform: `rotate(${wind.vrb ? 0 : wind.dir})` });
-        const dur = flowSeconds(wind), PER = 3;
+        const dur = flowSeconds(wind) * (wind.vrb ? VRB_SLOWER : 1), PER = 3;
         [-80, -60, -40, -20, 0, 20, 40, 60, 80].forEach((x, lane) => {
             for (let i = 0; i < PER; i++) {
                 const c = el('path', { d: `M ${x - 4} -3 L ${x} 2 L ${x + 4} -3` });
