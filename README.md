@@ -7,7 +7,7 @@ Watches an airport from your ADS-B receiver: counts its arrivals and
 departures, detects probable go-arounds and shows them in a browser over a
 tar1090 map, with the METAR wind on the runways.
 
-![toganomon console at Fukuoka (RJFF): LAST 24H, WIND, MOVEMENTS and GO-AROUNDS windows over the tar1090 map, which shows the climb-out of a departure picked in MOVEMENTS](docs/console.webp)
+![toganomon console at Fukuoka (RJFF): RWY/WIND, LAST 24H, MOVEMENTS and GO-AROUNDS (AAR132's go-around track) windows over the tar1090 map](docs/console.webp)
 
 Status: extracted from a home receiver setup at Fukuoka (RJFF), where it has
 run since November 2026.
