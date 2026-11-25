@@ -274,6 +274,10 @@ node tests/web_test.js
 node tests/console_test.js
 ```
 
+After changing a file in `console/` or `web/`, run `tools/stamp_console.py`:
+it sets the `?v=` of that file in `console/index.html`, so browsers load it
+again (the tests fail until it is run).
+
 ## License
 
 MIT
