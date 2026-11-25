@@ -1,6 +1,44 @@
 {
- "source": "OurAirports data of 2026-11-20 (public domain), drafted by tools/make_airports.py; each entry checked against ADS-B traffic with toganomon.py --check-runways",
+ "source": "OurAirports data of 2026-11-20 (public domain), drafted by tools/make_airports.py; each entry checked against ADS-B traffic: RJFF with toganomon.py --check-runways, the others with tools/tune/tune_airport.py on adsb.lol traces (ODbL)",
  "airports": {
+  "KJFK": {
+   "name": "John F. Kennedy International Airport",
+   "arp": [40.639447, -73.779317],
+   "elevation_ft": 13,
+   "checked": "2026-11-25: tools/tune/tune_airport.py on 4 days 2026-11-13 .. 2026-11-20 (adsb.lol, ODbL); passes: 13R/31L 1342, 04/22 1460, 13L/31R 846; 13R: about 100 ft flights along the shore across its approach count as arrivals (10 to 19 a day)",
+   "runways": [
+    {"ends": ["13R", "31L"], "true_track": 120.8, "center": [40.638149, -73.794151],
+     "gate_cross_km": 1.0, "length_m": 4423},
+    {"ends": ["04", "22"], "true_track": 30.7, "center": [40.63535, -73.768875],
+     "gate_cross_km": 1.6, "length_m": 3682, "members": ["04L/22R", "04R/22L"]},
+    {"ends": ["13L", "31R"], "true_track": 120.9, "center": [40.65075, -73.774749],
+     "gate_cross_km": 1.0, "length_m": 3048}
+   ]
+  },
+  "KLAX": {
+   "name": "Los Angeles International Airport",
+   "arp": [33.942501, -118.407997],
+   "elevation_ft": 125,
+   "checked": "2026-11-25: tools/tune/tune_airport.py on 4 days 2026-11-13 .. 2026-11-20 (adsb.lol, ODbL); passes: 7/25 3206, 6/24 2660",
+   "runways": [
+    {"ends": ["7", "25"], "true_track": 83.0, "center": [33.936617, -118.400914],
+     "gate_cross_km": 1.12, "length_m": 3930, "members": ["7L/25R", "7R/25L"]},
+    {"ends": ["6", "24"], "true_track": 83.0, "center": [33.94963, -118.416724],
+     "gate_cross_km": 1.11, "length_m": 3310, "members": ["6R/24L", "6L/24R"]}
+   ]
+  },
+  "RJBB": {
+   "name": "Kansai International Airport",
+   "arp": [34.427299, 135.244003],
+   "elevation_ft": 26,
+   "checked": "2026-11-25: tools/tune/tune_airport.py on 4 days 2026-11-16 .. 2026-11-20 (adsb.lol, ODbL); passes: 06L/24R 969, 06R/24L 1005",
+   "runways": [
+    {"ends": ["06L", "24R"], "true_track": 50.8, "center": [34.439847, 135.223152],
+     "gate_cross_km": 1.0, "length_m": 4000},
+    {"ends": ["06R", "24L"], "true_track": 50.9, "center": [34.427299, 135.244003],
+     "gate_cross_km": 1.0, "length_m": 3500}
+   ]
+  },
   "RJFF": {
    "name": "Fukuoka Airport",
    "arp": [33.585899, 130.451004],
@@ -9,6 +47,22 @@
    "runways": [
     {"ends": ["16", "34"], "true_track": 150.3, "center": [33.586069, 130.4492],
      "gate_cross_km": 1.1, "length_m": 2800, "members": ["16L/34R", "16R/34L"]}
+   ]
+  },
+  "RJTT": {
+   "name": "Tokyo Haneda International Airport",
+   "arp": [35.549678, 139.786958],
+   "elevation_ft": 35,
+   "checked": "2026-11-25: tools/tune/tune_airport.py on 4 days 2026-11-16 .. 2026-11-20 (adsb.lol, ODbL); passes: 16L/34R 1305, 16R/34L 1381, 04/22 702, 05/23 969",
+   "runways": [
+    {"ends": ["16L", "34R"], "true_track": 150.0, "center": [35.552796, 139.795844],
+     "gate_cross_km": 1.0, "length_m": 3360},
+    {"ends": ["16R", "34L"], "true_track": 150.0, "center": [35.548293, 139.777368],
+     "gate_cross_km": 1.0, "length_m": 3000},
+    {"ends": ["04", "22"], "true_track": 35.0, "center": [35.558237, 139.769194],
+     "gate_cross_km": 1.0, "length_m": 2500},
+    {"ends": ["05", "23"], "true_track": 42.7, "center": [35.532301, 139.812794],
+     "gate_cross_km": 1.0, "length_m": 2500}
    ]
   }
  }
