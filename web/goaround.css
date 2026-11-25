@@ -76,3 +76,18 @@
 .ga-after { stroke: #d29922; fill: none; stroke-linejoin: round; }
 .ga-turn { fill: #f85149; }
 .ga-end { fill: #3fb950; }
+.ga-head-dot { fill: #f0f6fc; }   /* the head of the stroke while it is drawn */
+.ga-replay {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    background: rgba(13, 17, 23, 0.8);
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-radius: 3px;
+    font: inherit;
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    cursor: pointer;
+}
+.ga-replay:hover { color: #c9d1d9; }

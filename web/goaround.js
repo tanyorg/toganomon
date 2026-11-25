@@ -19,6 +19,12 @@
 // figures after the container was resized; show(id) opens that go-around and
 // scrolls it into view.
 //
+// The track figure is there to show at a glance where the aircraft went and
+// how it ended, not for detail: when a heading is opened its track is drawn
+// once as one quick stroke (REPLAY_MS, in time order), then stays still until
+// the heading is closed and opened again or REPLAY is clicked. Not with
+// prefers-reduced-motion.
+//
 // The functions in GoAroundView other than mount() do not touch the DOM
 // (tests/web_test.js).
 (function (root) {
@@ -30,6 +36,8 @@
     // the straight line is not where the aircraft flew.
     const GAP_S = 60;
     const PLOT_MIN_W = 120;
+    // One track is drawn in this time, whatever its length.
+    const REPLAY_MS = 1500;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const formatters = {};
 
@@ -177,6 +185,22 @@
         };
     }
 
+    // The go-around with its track cut at elapsed second s (track times),
+    // the last segment ended where the aircraft was at s.
+    function trackAt(g, s) {
+        const tr = Array.isArray(g.track) ? g.track : [];
+        const out = [];
+        for (let i = 0; i < tr.length; i++) {
+            if (tr[i][0] <= s) { out.push(tr[i]); continue; }
+            if (i > 0 && s > tr[i - 1][0]) {
+                const a = tr[i - 1], b = tr[i], f = (s - a[0]) / (b[0] - a[0]);
+                out.push([s, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f]);
+            }
+            break;
+        }
+        return Object.assign({}, g, { track: out });
+    }
+
     // Which entries are open (ids, newest first). saved is the previous
     // { open, seen }. First time (no seen): only the newest. Afterwards: what
     // was open plus every go-around not seen before. Vanished ids are dropped.
@@ -235,14 +259,57 @@
             add('text', { x: e.at[0], y: e.at[1], class: 'ga-rwy-label', 'font-size': sw * 9, dx: sw * 4 })
                 .textContent = e.name;
         }
-        if (geo.before) add('path', { d: geo.before, class: 'ga-before', 'stroke-width': sw * 1.6 });
-        if (geo.after) add('path', { d: geo.after, class: 'ga-after', 'stroke-width': sw * 1.6 });
         const dash = `${(sw * 4).toFixed(3)} ${(sw * 3).toFixed(3)}`;
-        if (geo.beforeGaps) add('path', { d: geo.beforeGaps, class: 'ga-before', 'stroke-width': sw * 1.6, 'stroke-dasharray': dash });
-        if (geo.afterGaps) add('path', { d: geo.afterGaps, class: 'ga-after', 'stroke-width': sw * 1.6, 'stroke-dasharray': dash });
+        // all four always there (maybe empty), so that replay() can redraw them
+        for (const [part, cls, gap] of TRACK_PARTS) {
+            const attrs = { d: geo[part], class: cls, 'stroke-width': sw * 1.6, 'data-part': part };
+            if (gap) attrs['stroke-dasharray'] = dash;
+            add('path', attrs);
+        }
         if (geo.turn) add('circle', { cx: geo.turn[0], cy: geo.turn[1], r: sw * 3.5, class: 'ga-turn' });
         if (geo.end) add('circle', { cx: geo.end[0], cy: geo.end[1], r: sw * 2.5, class: 'ga-end' });
         return el;
+    }
+
+    const TRACK_PARTS = [['before', 'ga-before', false], ['after', 'ga-after', false],
+        ['beforeGaps', 'ga-before', true], ['afterGaps', 'ga-after', true]];
+
+    function reducedMotion() {
+        return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    // Draw the figure's track again as one stroke in REPLAY_MS, a dot at its
+    // head; the go-around point appears when the stroke gets there.
+    function replay(fig, g, airport) {
+        const el = fig.querySelector('svg.ga-track');
+        const tr = Array.isArray(g.track) ? g.track : [];
+        if (!el || tr.length < 2 || reducedMotion()) return;
+        if (el._replay) cancelAnimationFrame(el._replay);
+        const turn = el.querySelector('.ga-turn'), end = el.querySelector('.ga-end');
+        let head = el.querySelector('.ga-head-dot');
+        if (!head) {
+            head = document.createElementNS(SVG_NS, 'circle');
+            head.setAttribute('class', 'ga-head-dot');
+            head.setAttribute('r', trackGeometry(g, airport).scale / 160 * 2.5);
+            el.appendChild(head);
+        }
+        const t0 = tr[0][0], t1 = tr[tr.length - 1][0];
+        const start = performance.now();
+        const frame = now => {
+            if (!el.isConnected) return;     // the list was drawn again
+            const k = Math.min(1, (now - start) / REPLAY_MS);
+            const geo = trackGeometry(trackAt(g, t0 + (t1 - t0) * k), airport);
+            for (const [part] of TRACK_PARTS) el.querySelector(`[data-part="${part}"]`).setAttribute('d', geo[part]);
+            if (turn) turn.style.display = geo.turn ? '' : 'none';
+            if (end) end.style.display = k < 1 ? 'none' : '';
+            head.style.display = k < 1 && geo.end ? '' : 'none';
+            if (geo.end) {
+                head.setAttribute('cx', geo.end[0]);
+                head.setAttribute('cy', geo.end[1]);
+            }
+            el._replay = k < 1 ? requestAnimationFrame(frame) : null;
+        };
+        frame(start);   // the first frame now: no flash of the whole track
     }
 
     // The figure with the description, links and legend laid over it in
@@ -290,6 +357,13 @@
         }
         overlay.appendChild(lg);
         fig.appendChild(overlay);
+        if (!reducedMotion()) {
+            const again = document.createElement('button');
+            again.className = 'ga-replay';
+            again.textContent = '▶ REPLAY';
+            again.addEventListener('click', () => replay(fig, g, airport));
+            fig.appendChild(again);
+        }
         return fig;
     }
 
@@ -310,6 +384,9 @@
         const store = o.storage || localStore('toganomon');
         list.classList.add('ga-view');
         let items = [], airport = null, open = new Set(), timer = null;
+        // ids drawn since their heading was opened: render() rebuilds every
+        // figure, and only a newly opened one is drawn again
+        const drawn = new Set();
 
         function save(seen) {
             store.save({ open: [...open], seen });
@@ -343,9 +420,17 @@
                     render();
                 });
                 item.appendChild(head);
-                if (isOpen) item.appendChild(figure(g, airport, o));
+                if (isOpen) {
+                    const fig = figure(g, airport, o);
+                    item.appendChild(fig);
+                    if (!drawn.has(g.id)) {
+                        drawn.add(g.id);
+                        replay(fig, g, airport);
+                    }
+                }
                 list.appendChild(item);
             }
+            for (const id of [...drawn]) if (!open.has(id)) drawn.delete(id);
             fit();
         }
 
@@ -416,7 +501,7 @@
 
     const api = {
         mount, unlockChime, chime, clock, ordinal, title, typeText, climbText, outcomeText, windText, infoLines, legend,
-        runwayOf, trackGeometry, openIds, plotInset, flightAware,
+        runwayOf, trackGeometry, trackAt, openIds, plotInset, flightAware,
     };
     if (typeof module === 'object' && module.exports) module.exports = api;
     else root.GoAroundView = api;
