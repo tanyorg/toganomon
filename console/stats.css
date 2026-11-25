@@ -19,6 +19,10 @@ button.st-tile:disabled { cursor: default; }
 .st-val { font-size: 1.1rem; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .st-label { font-size: 0.55rem; color: #8b949e; letter-spacing: 0.06em; white-space: nowrap; }
 .st-on .st-val { color: #3fb950; }
+/* RWY with arrivals and departures on different runways: two small lines */
+.st-val.st-rwy-two { font-size: 0.7rem; line-height: 1.25; }
+.st-rwy-line { white-space: nowrap; }
+.st-rwy-kind { color: #8b949e; font-weight: normal; margin-right: 0.3em; }
 .st-hot .st-val { color: #d29922; }
 .st-flash { animation: st-flash 0.6s ease-in-out 6; }
 @keyframes st-flash { 50% { background: #d29922; } }

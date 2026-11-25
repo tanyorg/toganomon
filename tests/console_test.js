@@ -75,6 +75,9 @@ t('windLines: the runway in use, else the ends with a headwind', () => {
     assert.deepStrictEqual(W.windLines(w, AP, '34'), ['RWY34 TW 2 · XW 6L']);
     assert.deepStrictEqual(W.windLines(w, AP, null), ['RWY16 HW 2 · XW 6R', 'RWY27 HW 4 · XW 5L']);
     assert.deepStrictEqual(W.windLines(null, AP, '34'), []);
+    // several in use (Stats' onRunway), in their order; unknown ones skipped
+    assert.deepStrictEqual(W.windLines(w, AP, ['27', '16', '22']), ['RWY27 HW 4 · XW 5L', 'RWY16 HW 2 · XW 6R']);
+    assert.deepStrictEqual(W.windLines(w, AP, []), W.windLines(w, AP, null));
 });
 
 t('dirText / speedText / gustText / varText', () => {
@@ -126,6 +129,24 @@ t('Stats.view: no runway in use after an hour without movements', () => {
     assert.strictEqual(S.view({ ...SUM, runway_t: NOW - 3600 }, NOW, 'UTC').runway, '16');
     assert.strictEqual(S.view({ ...SUM, runway_t: NOW - 3601 }, NOW, 'UTC').runway, null);
     assert.strictEqual(S.view({ ...SUM, runway: null, runway_t: null }, NOW, 'UTC').runway, null);
+});
+
+t('Stats.view: runways in use from "runways", arrivals and departures apart', () => {
+    // RJTT: lands on 22/23, takes off from 16R/16L
+    const v = S.view({ ...SUM, runway: '16R', runways: { arr: ['22', '23'], dep: ['16R', '16L'] } }, NOW, 'UTC');
+    assert.strictEqual(v.runway, 'ARR 22/23 · DEP 16R/16L');
+    assert.deepStrictEqual(v.runways.lines, [{ kind: 'ARR', ends: '22/23' }, { kind: 'DEP', ends: '16R/16L' }]);
+    assert.deepStrictEqual(v.runways.ends, ['22', '23', '16R', '16L']);
+    // the same runways both ways, or one kind only: one line
+    const same = S.view({ ...SUM, runways: { arr: ['34L', '34R'], dep: ['34R', '34L'] } }, NOW, 'UTC');
+    assert.deepStrictEqual([same.runway, same.runways.ends], ['34L/34R', ['34L', '34R']]);
+    assert.strictEqual(S.view({ ...SUM, runways: { arr: [], dep: ['34'] } }, NOW, 'UTC').runway, '34');
+    // none in the last half hour: the last movement's runway for an hour, as before
+    const quiet = { ...SUM, runways: { arr: [], dep: [] } };
+    assert.deepStrictEqual(S.view(quiet, NOW, 'UTC').runways.ends, ['16']);
+    assert.strictEqual(S.view({ ...quiet, runway_t: NOW - 3601 }, NOW, 'UTC').runways, null);
+    // junk in "runways" is ignored
+    assert.strictEqual(S.view({ ...SUM, runways: { arr: [3, null, ''], dep: 'x' } }, NOW, 'UTC').runway, '16');
 });
 
 t('Stats.view: last go-around date only when 24 h has none', () => {

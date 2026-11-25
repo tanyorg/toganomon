@@ -234,6 +234,7 @@ class Movements(unittest.TestCase):
         cs.record_movements(st, "bbbbbb", [(T0 + 60, "arr", "16")], T0 + 3600)
         s = cs.summary(st, T0 + 3600)
         self.assertEqual((s["arrivals"], s["departures"], s["runway"], s["runway_t"]), (2, 1, "34", T0 + 3600))
+        self.assertEqual(s["runways"], {"arr": [], "dep": ["34"]})
         cs.record_movements(st, "", [], T0 + cs.WINDOW_S + 100)
         s = cs.summary(st, T0 + cs.WINDOW_S + 100)
         self.assertEqual((s["arrivals"], s["departures"]), (0, 1))
@@ -241,6 +242,27 @@ class Movements(unittest.TestCase):
     def test_summary_without_movements(self):
         s = cs.summary(cs.load_state("/nonexistent", T0), T0)
         self.assertEqual((s["arrivals"], s["departures"], s["runway"], s["runway_t"]), (0, 0, None, None))
+        self.assertEqual(s["runways"], {"arr": [], "dep": []})
+
+    def test_runways_in_use(self):
+        # RJTT-like: arrivals on 22 and 23, departures from 16R and 16L at once
+        now = T0 + 3600
+        moves = [[now - 60 * i, "arr", "22", "a"] for i in range(11)]
+        moves += [[now - 90, "arr", "23", "b"], [now - 1500, "arr", "23", "c"]]
+        moves += [[now - 60 * i - 30, "dep", "16R", "d"] for i in range(6)]
+        moves += [[now - 70 * i - 20, "dep", "16L", "e"] for i in range(5)]
+        self.assertEqual(cs.runways_in_use(moves, now), {"arr": ["22", "23"], "dep": ["16R", "16L"]})
+        # a stray pass next to a busy runway, and older movements, are left out
+        moves = [[now - 60 * i, "arr", "04", "a"] for i in range(15)] + [[now - 100, "arr", "13R", "b"]]
+        moves += [[now - cs.RUNWAYS_RECENT_S - 1, "dep", "31L", "c"]]
+        self.assertEqual(cs.runways_in_use(moves, now), {"arr": ["04"], "dep": []})
+        # a quiet half hour: one movement each is enough; the latest first on a tie
+        moves = [[now - 600, "arr", "27", "a"], [now - 300, "arr", "09", "b"]]
+        self.assertEqual(cs.runways_in_use(moves, now)["arr"], ["09", "27"])
+        # a change of direction on one runway: the end used last only, per kind
+        moves = [[now - 60 * i - 600, "arr", "34", "a"] for i in range(5)] + [[now - 120, "arr", "16", "b"]]
+        moves += [[now - 200, "dep", "34", "c"]]
+        self.assertEqual(cs.runways_in_use(moves, now), {"arr": ["16"], "dep": ["34"]})
 
     def test_backfill_then_recent(self):
         with tempfile.TemporaryDirectory() as d:

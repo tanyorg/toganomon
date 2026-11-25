@@ -8,7 +8,7 @@
 //       airport: 'RJFF',              // caption over the airport's counts
 //       onGa() {},                    // the G/A tile was clicked
 //       onIncrease(count) {},         // go-arounds went up while open
-//       onRunway(rwy | null) {},      // runway in use changed (null: none)
+//       onRunway(ends | null) {},     // runways in use changed: [designator] (null: none)
 //   });                               // -> { refresh(), stop(), setAirport(icao) }
 //
 // Stats.view and Stats.increased do not touch the DOM (tests/console_test.js).
@@ -32,12 +32,37 @@
     };
     const num = v => (typeof v === 'number' ? String(v) : '--');
 
+    // The runways in use: summary.json's "runways" (arrivals and departures
+    // apart, busiest first; toganomon 2026-11-25), else the last movement's
+    // runway while it is at most RUNWAY_ACTIVE_S old (an older summary, or a
+    // quiet half hour). -> { arr, dep, ends, text, lines } or null.
+    // text: one line ("34", "34L/34R", "ARR 22/23 · DEP 16R/16L"); lines: the
+    // same for a tile, [{ kind: 'ARR' | 'DEP' | null, ends: '22/23' }].
+    function runwaysInUse(s) {
+        const list = k => (s.runways && Array.isArray(s.runways[k])
+            ? s.runways[k].filter(r => typeof r === 'string' && r) : []);
+        let arr = list('arr'), dep = list('dep');
+        if (!arr.length && !dep.length) {
+            const active = typeof s.runway_t === 'number' && typeof s.runway === 'string' && s.runway
+                && s.now - s.runway_t <= RUNWAY_ACTIVE_S;
+            if (!active) return null;
+            arr = [s.runway];
+        }
+        const ends = [...new Set([...arr, ...dep])];
+        const same = !arr.length || !dep.length
+            || (arr.length === dep.length && [...arr].sort().join() === [...dep].sort().join());
+        const lines = same ? [{ kind: null, ends: (arr.length ? arr : dep).join('/') }]
+            : [{ kind: 'ARR', ends: arr.join('/') }, { kind: 'DEP', ends: dep.join('/') }];
+        const text = lines.map(l => (l.kind ? `${l.kind} ${l.ends}` : l.ends)).join(' · ');
+        return { arr, dep, ends, text, lines };
+    }
+
     // summary.json -> what the panel shows, or null if it is not a summary.
     // history: go-arounds.json's go_arounds (optional), for the last date.
     function view(s, nowSec, timeZone, history) {
         if (!s || typeof s.now !== 'number') return null;
         const tz = timeZone || 'UTC';
-        const active = typeof s.runway_t === 'number' && s.runway && s.now - s.runway_t <= RUNWAY_ACTIVE_S;
+        const inUse = runwaysInUse(s);
         const count = typeof s.go_arounds === 'number' ? s.go_arounds : null;
         const past = (Array.isArray(history) ? history : []).filter(g => g && typeof g.t === 'number');
         const latest = past.length ? past.reduce((a, b) => (b.t > a.t ? b : a)) : null;
@@ -62,7 +87,8 @@
         return {
             arrivals: num(s.arrivals),
             departures: num(s.departures),
-            runway: active ? s.runway : null,
+            runway: inUse ? inUse.text : null,
+            runways: inUse,
             goArounds: num(count),
             count,
             hot: count > 0,
@@ -81,7 +107,7 @@
         return typeof last === 'number' && typeof count === 'number' && count > last;
     }
 
-    const Stats = { view, increased, STALE_S, RUNWAY_ACTIVE_S };
+    const Stats = { view, increased, runwaysInUse, STALE_S, RUNWAY_ACTIVE_S };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Stats;
         return;
@@ -129,7 +155,7 @@
             ga.t.disabled = true;
         }
 
-        let last = null, runway, timer = null;
+        let last = null, runwayKey, timer = null;
 
         function renderRows(list) {
             for (const g in lists) {
@@ -171,7 +197,19 @@
             }
             arr.val.textContent = v.arrivals;
             dep.val.textContent = v.departures;
-            rwy.val.textContent = v.runway || '--';
+            // one line, or ARR and DEP apart in two smaller ones
+            const lines = v.runways ? v.runways.lines : [];
+            if (lines.length > 1) {
+                rwy.val.replaceChildren(...lines.map(l => {
+                    const d = node('div', 'st-rwy-line');
+                    d.append(node('span', 'st-rwy-kind', l.kind[0]), l.ends);
+                    return d;
+                }));
+            } else {
+                rwy.val.textContent = lines.length ? lines[0].ends : '--';
+            }
+            rwy.val.classList.toggle('st-rwy-two', lines.length > 1);
+            rwy.t.title = v.runway ? 'RUNWAYS IN USE: ' + v.runway : '';
             rwy.t.classList.toggle('st-on', !!v.runway);
             ga.val.textContent = v.goArounds;
             ga.t.classList.toggle('st-hot', v.hot);
@@ -183,9 +221,11 @@
                 if (o.onIncrease) o.onIncrease(v.count);
             }
             if (v.count !== null) last = v.count;
-            if (v.runway !== runway) {
-                runway = v.runway;
-                if (o.onRunway) o.onRunway(runway);
+            const ends = v.runways ? v.runways.ends : null;
+            const key = ends ? ends.join() : null;
+            if (key !== runwayKey) {
+                runwayKey = key;
+                if (o.onRunway) o.onRunway(ends);
             }
         }
 
