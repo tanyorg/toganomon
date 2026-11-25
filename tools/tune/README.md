@@ -97,6 +97,44 @@ With one day only (here 2026-11-16, north wind) it would also say:
 - **answer**: with `--answer`, the replay against what toganomon logged
   live (same kind, runway and hex within 2 minutes).
 
+## Before an entry goes into airports.json
+
+Look at the replay, not only at the recommendation. A gate can fit the
+traffic well and still count the wrong aircraft. For each airport:
+
+1. **Arrivals and departures balance.** Over a whole day the two counts
+   on the day's line should be close (RJTT: 567 / 552). A large gap means
+   the gate misses one kind, or counts something else as it.
+2. **Each runway end is used as expected.** In the `arr/dep` part of the
+   day's line, arrival ends and departure ends should match the airport's
+   published runway use (RJTT in a south wind: arrivals on 22 and 23,
+   departures from 16L and 16R). An end with a few arrivals that nothing
+   explains is suspect.
+3. **The runways in use agree with the wind.** Compare the ends used with
+   the METAR wind of those hours (the `--metar` archive): an end used for
+   arrivals with a tailwind of more than about 5 kt, hour after hour, is
+   suspect. The tool does not check this yet; look at it by hand.
+4. **Low aircraft without a movement are explained.** Look at the hexes
+   behind a large `low without a movement`: helicopters and light aircraft
+   beside the airport are expected; airliners mean a gate misses them.
+5. **Suspicious tracks are looked at.** For the hexes of points 2 to 4,
+   and the `second approaches` not found as go-arounds, look at the trace
+   (or a flight tracker) before trusting the entry.
+
+Known traps found this way:
+
+- KJFK 13R: two aircraft flying at about 100 ft along the shore across
+  the 13R approach counted as arrivals 10 to 19 times a day (point 2: a
+  few 13R arrivals whatever the wind).
+- A helicopter that landed and lifted off 8 minutes later looked like a
+  go-around (KJFK 2026-11-15); departures after a landing no longer count.
+- Looking for second approaches in a circle around the reference point
+  picked up LGA and Hawthorne traffic near KJFK and KLAX; they are looked
+  for on the finals only.
+
+Write what was checked, and on which days, in the entry's `checked`
+(`--out` drafts it).
+
 ## Caveats
 
 - One day may use one direction only: a runway end without traffic keeps
