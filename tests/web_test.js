@@ -181,6 +181,23 @@ t('chime: nothing without a running AudioContext', () => {
     assert.strictEqual(started, 2);                    // two tones
 });
 
+t('trackAt: the track up to s, the last segment ended where the aircraft was', () => {
+    const g = { ...base, track: [[0, -10, 0, 3000], [10, -8, 0, 2000], [20, -6, 1, 2500]] };
+    assert.deepStrictEqual(v.trackAt(g, 15).track, [[0, -10, 0, 3000], [10, -8, 0, 2000], [15, -7, 0.5, 2250]]);
+    assert.deepStrictEqual(v.trackAt(g, 10).track, [[0, -10, 0, 3000], [10, -8, 0, 2000]]);
+    assert.deepStrictEqual(v.trackAt(g, 99).track, g.track);
+    assert.deepStrictEqual(v.trackAt(g, -1).track, []);
+    assert.strictEqual(g.track.length, 3);              // the go-around is not changed
+    assert.deepStrictEqual(v.trackAt({ ...base, track: undefined }, 5).track, []);
+});
+
+t('trackAt: the go-around point only once the stroke gets past it', () => {
+    // go-around at 10 s into the track (t - track_from)
+    const g = { ...base, t: 1000, track_from: 990, track: [[0, -10, 0, 1500], [10, -8, 0, 1000], [20, -6, 0, 1600]] };
+    assert.strictEqual(v.trackGeometry(v.trackAt(g, 8), RJFF).turn, null);
+    assert.ok(v.trackGeometry(v.trackAt(g, 15), RJFF).turn);
+});
+
 if (failed) {
     console.log(`${failed} failed`);
     process.exit(1);
