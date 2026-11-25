@@ -411,6 +411,7 @@
                 list.appendChild(empty);
                 return;
             }
+            const toDraw = [];
             for (const g of items) {
                 const isOpen = open.has(g.id);
                 const item = document.createElement('div');
@@ -431,13 +432,15 @@
                     item.appendChild(fig);
                     if (!drawn.has(g.id)) {
                         drawn.add(g.id);
-                        replay(fig, g, airport);
+                        toDraw.push([fig, g]);
                     }
                 }
                 list.appendChild(item);
             }
             for (const id of [...drawn]) if (!open.has(id)) drawn.delete(id);
             fit();
+            // once in the page: replay() stops on a figure that is not
+            for (const [fig, g] of toDraw) replay(fig, g, airport);
         }
 
         async function refresh() {
