@@ -1,5 +1,6 @@
-/* toganomon WIND panel (wind.js: Wind.mount, or Wind.draw into an
-   <svg viewBox="-70 -70 140 140">). Dark theme; override as needed. */
+/* toganomon RWY/WIND panel (wind.js: Wind.mount, or Wind.draw into an
+   <svg viewBox="-62.75 -62.75 125.5 125.5">). Dark theme; override as needed.
+   The diagram fills the panel's width: size the window, not the svg. */
 .wind-panel {
     display: flex;
     flex-direction: column;
@@ -9,9 +10,8 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: #c9d1d9;
 }
-.wind-svg { width: 140px; height: 140px; }
-.wind-dial { fill: rgba(13, 17, 23, 0.6); stroke: #30363d; stroke-width: 1.5; stroke-dasharray: 4 3; }
-.wind-cardinal { fill: #8b949e; font-size: 9px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+.wind-svg { display: block; align-self: stretch; width: 100%; height: auto; aspect-ratio: 1; }
+.wind-dial { fill: rgba(13, 17, 23, 0.6); stroke: #30363d; stroke-width: 1.5; }
 .wind-rwy { stroke: rgba(139, 148, 158, 0.55); stroke-width: 5; stroke-linecap: butt; }
 .wind-rwy-name {
     fill: #8b949e; font-size: 9px; font-family: monospace; text-anchor: middle; dominant-baseline: central;
@@ -23,18 +23,23 @@
 .wind-rwy-name.both, .wind-dir-mark.both { fill: #f0b72f; }
 .wind-rwy-name.arr, .wind-dir-mark.arr, .wind-plane.arr path { fill: #58a6ff; }
 .wind-rwy-name.dep, .wind-dir-mark.dep, .wind-plane.dep path { fill: #3fb950; }
-/* a recorded movement (Wind.mount's pulse) */
+/* a recorded event (Wind.mount's pulse); go-arounds in the console's G/A amber */
 .wind-plane path { stroke: #0d1117; stroke-width: 0.6; }
+.wind-plane.ga path { fill: #d29922; }
 .wind-rwy-glow { stroke-width: 5; stroke-linecap: round; opacity: 0; }
 .wind-rwy-glow.arr { stroke: #58a6ff; }
 .wind-rwy-glow.dep { stroke: #3fb950; }
-.wind-var { fill: none; stroke: #ffa657; stroke-width: 3; opacity: 0.6; }
-/* the chevrons drifting downwind, faint, under the runways */
+.wind-rwy-glow.ga { stroke: #d29922; }
+.wind-final { stroke: #d29922; stroke-width: 2; stroke-dasharray: 3 2; opacity: 0; }
+/* the variable sector, a faint wedge; the chevrons drifting downwind */
+.wind-var { fill: #ffa657; opacity: 0.08; }
 .wind-flow path { fill: none; stroke: #ffa657; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
-/* the head/cross components line(s) under the dial */
+/* direction and speed on one line, the same size */
+.wind-head { display: flex; gap: 0.6em; align-items: baseline; margin-top: 4px; font-size: 1rem; font-weight: bold; }
+.wind-dir { color: #ffa657; }
+.wind-spd { color: #c9d1d9; }
+/* the head/cross components line(s) */
 .wind-comp { font-size: 0.65rem; color: #c9d1d9; text-align: center; margin-top: 2px; white-space: pre-line; }
-.wind-dir { font-size: 1.1rem; font-weight: bold; color: #ffa657; }
-.wind-spd { font-size: 0.9rem; }
 .wind-gust-badge {
     display: inline-block;
     padding: 0 3px;
@@ -45,4 +50,11 @@
     border-radius: 2px;
 }
 .wind-var-text { font-size: 0.65rem; color: #8b949e; }
+/* the last event's text; two lines kept free so the window keeps its size */
+.wind-event { min-height: 2.6em; line-height: 1.3; font-size: 0.62rem; letter-spacing: 0.04em; text-align: center; white-space: pre; opacity: 0; transition: opacity 0.4s; }
+.wind-event.on { opacity: 1; }
+.wind-event.arr { color: #58a6ff; }
+.wind-event.dep { color: #3fb950; }
+.wind-event.ga { color: #d29922; font-weight: bold; }
+@media (prefers-reduced-motion: reduce) { .wind-event { transition: none; } }
 .wind-panel [hidden] { display: none; }

@@ -90,7 +90,7 @@ t('inUse / useOf: { arr, dep } from Stats, or a designator or a list', () => {
     assert.deepStrictEqual(W.windLines(w, AP, { arr: ['27'], dep: ['16'] }), ['RWY27 HW 4 · XW 5L', 'RWY16 HW 2 · XW 6R']);
 });
 
-t('layout: RJTT runways where they are, names apart and inside the dial', () => {
+t('layout: RJTT runways where they are, names apart and inside the square', () => {
     const fs = require('fs');
     const rjtt = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'airports.json'), 'utf8')).airports.RJTT;
     const lay = W.layout(rjtt, 60);
@@ -103,13 +103,13 @@ t('layout: RJTT runways where they are, names apart and inside the dial', () => 
     assert.ok(e['23'].thr[1] > e['16L'].far[1] - 5 && e['05'].thr[0] > 0);
     const labels = Object.values(e).map(x => x.label);
     for (let i = 0; i < labels.length; i++) {
-        assert.ok(Math.hypot(...labels[i]) < 50, 'inside the dial');
+        assert.ok(Math.max(Math.abs(labels[i][0]), Math.abs(labels[i][1])) < 56, 'inside the square');
         for (let j = i + 1; j < labels.length; j++) {
             assert.ok(Math.hypot(labels[i][0] - labels[j][0], labels[i][1] - labels[j][1]) > 12.9, 'apart');
         }
     }
-    // the runways fit within r - 26 of the middle
-    for (const r of lay.runways) for (const p of [r.a, r.b]) assert.ok(Math.hypot(...p) <= 34.01);
+    // the runways fit within r - 15 of the middle
+    for (const r of lay.runways) for (const p of [r.a, r.b]) assert.ok(Math.hypot(...p) <= 45.01);
 });
 
 t('layout: without a centre, through the middle at the true track', () => {
@@ -274,6 +274,22 @@ t('Movements.newMovements: the ones since the last poll, oldest first', () => {
     // a tab that slept: only the last few, none older than 5 minutes
     const many = { now: 5000, movements: [mv(4000, 'arr', 'x'), ...[1, 2, 3, 4, 5].map(i => mv(4900 + i, 'arr', 'n' + i))] };
     assert.deepStrictEqual(M.newMovements(prev, many).map(m => m.hex), ['n2', 'n3', 'n4', 'n5']);
+});
+
+t('Movements.pulseOf / missedPulse: what RWY/WIND shows', () => {
+    const t = Date.UTC(2026, 10, 25, 5, 46, 36) / 1000;       // 14:46 JST
+    assert.deepStrictEqual(M.pulseOf({ t, kind: 'arr', rwy: '16', flight: 'ANA253', hex: '86951c' }, 'Asia/Tokyo'),
+        { end: '16', kind: 'arr', text: 'ANA253 ARR 16 14:46' });
+    assert.deepStrictEqual(M.pulseOf({ t, kind: 'dep', rwy: '34', flight: null, hex: '86951c' }, 'Asia/Tokyo').text,
+        '86951C DEP 34 14:46');
+    // the climb of a go-around
+    assert.deepStrictEqual(M.pulseOf({ t, kind: 'dep', rwy: '16', flight: 'AAR132', hex: '71c510', ga: 'x' }, 'Asia/Tokyo'),
+        { end: '16', kind: 'ga', text: 'GO-AROUND\nAAR132 RWY16 14:46' });
+    // a missed approach above the gate, from go-arounds.json; nothing for another go-around
+    const g = { id: 'a', t, rwy: '16', flight: 'TWB207', hex: '71c0a1', missed: { low_ft: 980, km: 7.5 } };
+    assert.deepStrictEqual(M.missedPulse(g, 'Asia/Tokyo'), { end: '16', kind: 'missed', text: 'MISSED APPROACH\nTWB207 RWY16 14:46' });
+    assert.strictEqual(M.missedPulse({ ...g, missed: null }, 'Asia/Tokyo'), null);
+    assert.strictEqual(M.missedPulse(null, 'Asia/Tokyo'), null);
 });
 
 t('Movements.cells: local time, ARR/DEP, hex without a callsign', () => {

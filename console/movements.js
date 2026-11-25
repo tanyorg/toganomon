@@ -143,6 +143,23 @@
             .slice(-NEW_MAX);
     }
 
+    // What RWY/WIND shows for a new movement: { end, kind, text }. The
+    // climb of a go-around ("ga" set on the departure) is kind 'ga'.
+    function pulseOf(m, timeZone) {
+        const who = m.flight || (m.hex ? m.hex.toUpperCase() : '?');
+        const at = hhmm(m.t, timeZone);
+        if (m.kind === 'dep' && m.ga) return { end: m.rwy, kind: 'ga', text: `GO-AROUND\n${who} RWY${m.rwy} ${at}` };
+        return { end: m.rwy, kind: m.kind, text: `${who} ${m.kind.toUpperCase()} ${m.rwy} ${at}` };
+    }
+
+    // The same for a go-around of go-arounds.json flown above the gate (it
+    // has no movements), or null for any other.
+    function missedPulse(g, timeZone) {
+        if (!g || !g.missed || typeof g.t !== 'number' || !g.rwy) return null;
+        const who = g.flight || (g.hex ? g.hex.toUpperCase() : '?');
+        return { end: g.rwy, kind: 'missed', text: `MISSED APPROACH\n${who} RWY${g.rwy} ${hhmm(g.t, timeZone)}` };
+    }
+
     function sameMovement(a, b) {
         return !!a && !!b && a.t === b.t && a.kind === b.kind && a.hex === b.hex;
     }
@@ -273,7 +290,10 @@
         return { refresh, stop };
     }
 
-    const Movements = { mount, view, cells, traceParams, mapView, sameMovement, newMovements, hhmm, dayText, withDays, showingText };
+    const Movements = {
+        mount, view, cells, traceParams, mapView, sameMovement, newMovements, pulseOf, missedPulse, hhmm, dayText,
+        withDays, showingText,
+    };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Movements;
         return;
