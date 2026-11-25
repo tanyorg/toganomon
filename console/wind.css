@@ -34,6 +34,7 @@
 /* the variable sector, a faint wedge; the chevrons drifting downwind */
 .wind-var { fill: #ffa657; opacity: 0.08; }
 .wind-flow path { fill: none; stroke: #ffa657; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
+.wind-flow.vrb path { opacity: 0.3; }   /* a variable wind turning slowly round */
 /* direction and speed on one line, the same size */
 .wind-head { display: flex; gap: 0.6em; align-items: baseline; margin-top: 4px; font-size: 1rem; font-weight: bold; }
 .wind-dir { color: #ffa657; }

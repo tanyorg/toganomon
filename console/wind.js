@@ -1,9 +1,9 @@
 // toganomon console: the RWY/WIND window. The airport's runways where they
 // are (centre, length and true track from go-arounds.json's airport block),
 // north up, in a rounded square; the METAR wind (true, as the tracks) as
-// small chevrons drifting downwind, its direction and speed on one line, and
-// the head/cross components on the runways in use, the same way
-// toganomon.py computes them for a go-around. A runway in use is blue for
+// small chevrons drifting downwind (turning slowly round for VRB), its
+// direction and speed on one line, and the head/cross components on the
+// runways in use, the same way toganomon.py computes them for a go-around. A runway in use is blue for
 // arrivals, green for departures, amber for both, with a small triangle
 // along the direction of use.
 // Wind.mount(element) builds the whole panel and returns
@@ -243,11 +243,22 @@
     }
 
     // Small chevrons drifting downwind, nine lanes, under the runways; still
-    // (spread over the square) for reduced motion.
+    // (spread over the square) for reduced motion. A variable wind (VRB):
+    // the whole drift turns slowly round (none for reduced motion, as a
+    // still one would show a direction).
+    const VRB_TURN_S = 40;
     function drawFlow(svg, wind, clip) {
-        const flow = el('g', { 'clip-path': clip, class: 'wind-flow' });
-        const g = el('g', { transform: `rotate(${wind.dir})` });
-        const dur = flowSeconds(wind), still = reducedMotion(), PER = 3;
+        const still = reducedMotion();
+        if (wind.vrb && still) return;
+        const flow = el('g', { 'clip-path': clip, class: 'wind-flow' + (wind.vrb ? ' vrb' : '') });
+        const turn = el('g', {});
+        if (wind.vrb) {
+            turn.appendChild(el('animateTransform', {
+                attributeName: 'transform', type: 'rotate', from: '0', to: '360', dur: `${VRB_TURN_S}s`, repeatCount: 'indefinite',
+            }));
+        }
+        const g = el('g', { transform: `rotate(${wind.vrb ? 0 : wind.dir})` });
+        const dur = flowSeconds(wind), PER = 3;
         [-80, -60, -40, -20, 0, 20, 40, 60, 80].forEach((x, lane) => {
             for (let i = 0; i < PER; i++) {
                 const c = el('path', { d: `M ${x - 4} -3 L ${x} 2 L ${x + 4} -3` });
@@ -263,7 +274,8 @@
                 g.appendChild(c);
             }
         });
-        flow.appendChild(g);
+        turn.appendChild(g);
+        flow.appendChild(turn);
         svg.appendChild(flow);
     }
 
@@ -283,7 +295,7 @@
                 class: 'wind-var', 'clip-path': clip,
             }));
         }
-        if (wind && wind.dir !== null && !wind.calm) drawFlow(svg, wind, clip);
+        if (wind && !wind.calm && (wind.dir !== null || wind.vrb)) drawFlow(svg, wind, clip);
         const lay = layout(airport, R);
         for (const { a, b } of lay.runways) {
             svg.appendChild(el('line', { x1: fix(a[0]), y1: fix(a[1]), x2: fix(b[0]), y2: fix(b[1]), class: 'wind-rwy' }));
