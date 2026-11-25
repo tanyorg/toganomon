@@ -13,11 +13,24 @@
 .wind-dial { fill: rgba(13, 17, 23, 0.6); stroke: #30363d; stroke-width: 1.5; stroke-dasharray: 4 3; }
 .wind-cardinal { fill: #8b949e; font-size: 9px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
 .wind-rwy { stroke: rgba(139, 148, 158, 0.55); stroke-width: 5; stroke-linecap: butt; }
-.wind-rwy-name { fill: #8b949e; font-size: 9px; font-family: monospace; text-anchor: middle; dominant-baseline: central; }
-.wind-rwy-name.in-use { fill: #f0b72f; font-weight: bold; }
+.wind-rwy-name {
+    fill: #8b949e; font-size: 9px; font-family: monospace; text-anchor: middle; dominant-baseline: central;
+    /* a dark halo keeps a name readable over a runway line */
+    paint-order: stroke; stroke: #0d1117; stroke-width: 2.5px; stroke-linejoin: round;
+}
+/* runways in use: arrivals blue, departures green (as in MOVEMENTS), both amber */
+.wind-rwy-name.in-use { font-weight: bold; }
+.wind-rwy-name.both, .wind-dir-mark.both { fill: #f0b72f; }
+.wind-rwy-name.arr, .wind-dir-mark.arr, .wind-plane.arr path { fill: #58a6ff; }
+.wind-rwy-name.dep, .wind-dir-mark.dep, .wind-plane.dep path { fill: #3fb950; }
+/* a recorded movement (Wind.mount's pulse) */
+.wind-plane path { stroke: #0d1117; stroke-width: 0.6; }
+.wind-rwy-glow { stroke-width: 5; stroke-linecap: round; opacity: 0; }
+.wind-rwy-glow.arr { stroke: #58a6ff; }
+.wind-rwy-glow.dep { stroke: #3fb950; }
 .wind-var { fill: none; stroke: #ffa657; stroke-width: 3; opacity: 0.6; }
-.wind-arrow line { stroke: #ffa657; stroke-width: 3; }
-.wind-arrow path { fill: #ffa657; }
+/* the chevrons drifting downwind, faint, under the runways */
+.wind-flow path { fill: none; stroke: #ffa657; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
 /* the head/cross components line(s) under the dial */
 .wind-comp { font-size: 0.65rem; color: #c9d1d9; text-align: center; margin-top: 2px; white-space: pre-line; }
 .wind-dir { font-size: 1.1rem; font-weight: bold; color: #ffa657; }

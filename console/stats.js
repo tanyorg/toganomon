@@ -8,7 +8,7 @@
 //       airport: 'RJFF',              // caption over the airport's counts
 //       onGa() {},                    // the G/A tile was clicked
 //       onIncrease(count) {},         // go-arounds went up while open
-//       onRunway(ends | null) {},     // runways in use changed: [designator] (null: none)
+//       onRunway(use | null) {},      // runways in use changed: { arr: [...], dep: [...] } (null: none)
 //   });                               // -> { refresh(), stop(), setAirport(icao) }
 //
 // Stats.view and Stats.increased do not touch the DOM (tests/console_test.js).
@@ -46,7 +46,8 @@
             const active = typeof s.runway_t === 'number' && typeof s.runway === 'string' && s.runway
                 && s.now - s.runway_t <= RUNWAY_ACTIVE_S;
             if (!active) return null;
-            arr = [s.runway];
+            arr = [s.runway];               // kind not known: both
+            dep = [s.runway];
         }
         const ends = [...new Set([...arr, ...dep])];
         const same = !arr.length || !dep.length
@@ -201,7 +202,7 @@
             const lines = v.runways ? v.runways.lines : [];
             if (lines.length > 1) {
                 rwy.val.replaceChildren(...lines.map(l => {
-                    const d = node('div', 'st-rwy-line');
+                    const d = node('div', 'st-rwy-line st-rwy-' + l.kind.toLowerCase());
                     d.append(node('span', 'st-rwy-kind', l.kind[0]), l.ends);
                     return d;
                 }));
@@ -221,11 +222,11 @@
                 if (o.onIncrease) o.onIncrease(v.count);
             }
             if (v.count !== null) last = v.count;
-            const ends = v.runways ? v.runways.ends : null;
-            const key = ends ? ends.join() : null;
+            const use = v.runways ? { arr: v.runways.arr, dep: v.runways.dep } : null;
+            const key = JSON.stringify(use);
             if (key !== runwayKey) {
                 runwayKey = key;
-                if (o.onRunway) o.onRunway(ends);
+                if (o.onRunway) o.onRunway(use);
             }
         }
 

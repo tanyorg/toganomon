@@ -23,6 +23,10 @@ button.st-tile:disabled { cursor: default; }
 .st-val.st-rwy-two { font-size: 0.7rem; line-height: 1.25; }
 .st-rwy-line { white-space: nowrap; }
 .st-rwy-kind { color: #8b949e; font-weight: normal; margin-right: 0.3em; }
+/* ... in a tile two columns wide, arrivals blue and departures green */
+.st-tiles:has(.st-rwy-two) { grid-template-columns: 1fr 1fr 2fr 1fr; }
+.st-on .st-val .st-rwy-arr { color: #58a6ff; }
+.st-on .st-val .st-rwy-dep { color: #3fb950; }
 .st-hot .st-val { color: #d29922; }
 .st-flash { animation: st-flash 0.6s ease-in-out 6; }
 @keyframes st-flash { 50% { background: #d29922; } }
