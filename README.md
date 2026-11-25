@@ -70,9 +70,10 @@ Then open `http://<host>:8080/` (`WEB_PORT`).
 
 > [!WARNING]
 > **Do not expose the console to the internet.** It has no login, and the
-> tar1090 map it includes shows **where your receiver is**: the site
-> marker, range rings and every aircraft's distance from it, i.e. roughly
-> where you live. Keep it on your LAN, or reach it over a VPN. Do not
+> tar1090 it includes gives away **where your receiver is**: its
+> `receiver.json` has the position, and tar1090 opened on its own shows
+> the site marker, range rings and every aircraft's distance from it,
+> i.e. roughly where you live. Keep it on your LAN, or reach it over a VPN. Do not
 > forward `WEB_PORT` on your router, and do not count on a host firewall
 > (ufw, firewalld) to close it: Docker publishes ports through its own
 > iptables rules, which bypass them.
@@ -142,6 +143,11 @@ This starts three containers:
     starts and ends. The **K** button labels every point with altitude and
     time.
   - How far back a trace can go depends on ultrafeeder's globe history.
+  - The console makes the airport tar1090's site: its **H** button goes
+    back to the airport, and the range rings and the distances in its
+    list are from the airport, not from your receiver. tar1090 keeps that
+    in the browser, also for `/tar1090/` opened on its own; open
+    `/tar1090/?SiteClear` to go back to the receiver's position.
 
 ## Airport data
 

@@ -143,8 +143,8 @@ t('clampPos: inside the view and below the header', () => {
     assert.deepStrictEqual(F.clampPos({ left: 10, top: 100 }, 400, 600, 1400, 900, 50), { left: 10, top: 100 });
 });
 
-t('mapUrl: tar1090 centred on the ARP', () => {
-    assert.strictEqual(C.mapUrl(AP), '/tar1090/?zoom=10&lat=10.5000&lon=20.2500');
+t('mapUrl: tar1090 centred on the ARP, the ARP its site (H button, distances)', () => {
+    assert.strictEqual(C.mapUrl(AP), '/tar1090/?zoom=10&lat=10.5000&lon=20.2500&SiteLat=10.5000&SiteLon=20.2500');
     assert.strictEqual(C.mapUrl(null, 9), '/tar1090/?zoom=9');
 });
 
@@ -354,7 +354,7 @@ t('Movements.sameMovement and Console.traceUrl', () => {
     assert.strictEqual(M.sameMovement(null, MV.movements[2]), false);
     assert.strictEqual(C.traceUrl(M.traceParams(MV.movements[0]), AP),
         '/tar1090/?icao=888165&showTrace=2026-11-24&startTime=06%3A49%3A29&endTime=07%3A07%3A29'
-        + '&zoom=10&lat=10.5000&lon=20.2500');
+        + '&zoom=10&lat=10.5000&lon=20.2500&SiteLat=10.5000&SiteLon=20.2500');
     assert.strictEqual(C.traceUrl({ icao: 'abc' }, null, 11), '/tar1090/?icao=abc&zoom=11');
 });
 

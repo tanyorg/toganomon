@@ -19,12 +19,23 @@
     const WX_MS = 300000;
     const MAP_ZOOM = 10;
 
+    // The airport's ARP as tar1090's view centre (lat, lon) and as its site
+    // (SiteLat, SiteLon): its H button then comes back to the airport, and
+    // its range rings and distances are from the airport, not from the
+    // receiver (whose position a screenshot would give away otherwise).
+    // tar1090 keeps the site in its localStorage; ?SiteClear forgets it.
+    function setAirport(p, airport) {
+        if (!airport || !Array.isArray(airport.arp)) return;
+        const lat = airport.arp[0].toFixed(4), lon = airport.arp[1].toFixed(4);
+        p.set('lat', lat);
+        p.set('lon', lon);
+        p.set('SiteLat', lat);
+        p.set('SiteLon', lon);
+    }
+
     function mapUrl(airport, zoom) {
         const p = new URLSearchParams({ zoom: String(zoom || MAP_ZOOM) });
-        if (airport && Array.isArray(airport.arp)) {
-            p.set('lat', airport.arp[0].toFixed(4));
-            p.set('lon', airport.arp[1].toFixed(4));
-        }
+        setAirport(p, airport);
         return '/tar1090/?' + p.toString();
     }
 
@@ -34,10 +45,7 @@
     function traceUrl(params, airport, zoom) {
         const p = new URLSearchParams(params);
         p.set('zoom', String(zoom || MAP_ZOOM));
-        if (airport && Array.isArray(airport.arp)) {
-            p.set('lat', airport.arp[0].toFixed(4));
-            p.set('lon', airport.arp[1].toFixed(4));
-        }
+        setAirport(p, airport);
         return '/tar1090/?' + p.toString();
     }
 
