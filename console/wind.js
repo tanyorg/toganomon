@@ -379,9 +379,10 @@
     };
 
     // The RWY/WIND panel: the diagram, direction and speed, gust badge,
-    // variable sector, head/cross components, the text of the last event.
+    // variable sector, head/cross components, and the text of the last event,
+    // kept until the next one (what happened last, at a glance).
     // Styles: wind.css.
-    const EVENT_S = { arr: 3.5, dep: 3.5, ga: 8, missed: 8 };
+    const EVENT_KINDS = ['arr', 'dep', 'ga', 'missed'];
     Wind.mount = function (container) {
         const div = (cls) => {
             const d = document.createElement('div');
@@ -398,7 +399,7 @@
         ev.setAttribute('aria-live', 'polite');
         container.replaceChildren(svg, head, gust, vr, comp, ev);
         const st = { metar: null, airport: null, runway: null };
-        let lay = null, evTimer = null;
+        let lay = null;
 
         function render() {
             const w = parseWind(st.metar);
@@ -423,11 +424,9 @@
         return {
             pulse(end, kind, text) {
                 Wind.pulse(svg, lay, end, kind);
-                if (!text || !EVENT_S[kind]) return;
+                if (!text || !EVENT_KINDS.includes(kind)) return;
                 ev.textContent = text;
                 ev.className = 'wind-event on ' + (kind === 'missed' ? 'ga' : kind);
-                clearTimeout(evTimer);
-                evTimer = setTimeout(() => { ev.className = 'wind-event'; }, EVENT_S[kind] * 1000);
             },
             update(part) {
                 let changed = false;
