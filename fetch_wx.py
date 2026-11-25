@@ -43,8 +43,12 @@ def report_body(raw, icao):
     if len(lines) < 2:
         return None
     body = " ".join(" ".join(lines[1:]).split())
+    # One report only: NOAA's file for one airport can carry the next one of
+    # the same bulletin after the "=" that ends a report (RJFF.TXT on
+    # 2026-11-22 and 25: "... 18010KT= TAF RJCC 250505Z ...").
+    body = re.split(r"\s*=|\s(?=TAF\s)", body, maxsplit=1)[0].strip()
     # METAR: "ICAO ddhhmmZ ..."; TAF: "TAF [AMD|COR] ICAO ddhhmmZ ..."
-    return body if icao in body.split()[:3] else None
+    return body if body and icao in body.split()[:3] else None
 
 
 def write_atomic(path, text, mode=0o644):

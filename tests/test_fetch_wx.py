@@ -51,6 +51,21 @@ class FetchWx(unittest.TestCase):
         self.assertIsNone(fw.report_body("2026/11/21 04:30\n", "ZZZZ"))
         self.assertIsNone(fw.report_body("<html>Not Found</html>", "ZZZZ"))
 
+    def test_one_report_only(self):
+        # NOAA's RJFF.TXT on 2026-11-25: RJCC's TAF after RJFF's "="
+        raw = ("2026/11/25 06:00\nTAF RJFF 250505Z 2506/2612 27006KT CAVOK \n"
+               "      BECMG 2506/2508 18010KT= TAF RJCC 250505Z 2506/2612 18006KT 9999 FEW020 BKN040 \n"
+               "      BECMG 2600/2603 27014KT \n      BECMG 2606/2609 20008KT\n")
+        self.assertEqual(fw.report_body(raw, "RJFF"), "TAF RJFF 250505Z 2506/2612 27006KT CAVOK BECMG 2506/2508 18010KT")
+        # the next report without an "=" before it
+        raw = "2026/11/25 06:00\nTAF RJFF 250505Z 2506/2612 27006KT CAVOK TAF RJCC 250505Z 2506/2612 18006KT\n"
+        self.assertEqual(fw.report_body(raw, "RJFF"), "TAF RJFF 250505Z 2506/2612 27006KT CAVOK")
+        # an amended TAF keeps its AMD; a METAR ending in "=" loses only that
+        self.assertEqual(fw.report_body("x\nTAF AMD RJFF 251030Z 2511/2612 18010KT=\n", "RJFF"),
+                         "TAF AMD RJFF 251030Z 2511/2612 18010KT")
+        self.assertEqual(fw.report_body("x\nRJFF 251030Z 18010KT 9999 Q1020=\n", "RJFF"),
+                         "RJFF 251030Z 18010KT 9999 Q1020")
+
     def test_writes_and_archives(self):
         arc = os.path.join(self.dir.name, "wx")
         rc, urls, out, _ = self.run_main(["--archive", arc, "zzzz", "metar", self.out], METAR)
