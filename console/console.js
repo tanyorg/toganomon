@@ -171,6 +171,8 @@
             ga.open();
             view.show(id);
         },
+        // each new movement lands or takes off on the WIND dial, one by one
+        onNew: list => list.forEach((m, i) => setTimeout(() => wind.pulse(m.rwy, m.kind), i * 900)),
     });
     stats = Stats.mount($('statsBody'), {
         url: DATA + 'summary.json', historyUrl: DATA + 'go-arounds.json', timeZone, pollMs: SUMMARY_MS,

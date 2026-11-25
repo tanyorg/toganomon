@@ -8,6 +8,8 @@
 //       onSelect(m, view) {},   // a row was clicked: view = Movements.mapView(m, now);
 //                               // (null, null) to go back to the live map
 //       onGa(id) {},        // the G/A mark of a row was clicked (go-around id)
+//       onNew(list) {},     // movements recorded since the last poll, oldest
+//                           // first (Movements.newMovements); not on the first
 //   });
 //   -> { refresh(), stop() }
 //
@@ -125,13 +127,29 @@
     }
 
     // Same movement (to keep the selected row across polls).
+    // Movements in doc that were not in prev (the poll before), oldest first:
+    // at most NEW_MAX, none older than NEW_MAX_AGE_S before doc.now (a tab
+    // that slept does not replay an hour). None on the first poll.
+    const NEW_MAX = 4;
+    const NEW_MAX_AGE_S = 5 * 60;
+    function newMovements(prev, doc) {
+        if (!prev || !doc) return [];
+        const key = m => `${m.t}|${m.kind}|${m.hex}`;
+        const old = new Set(view(prev, 'ALL').rows.map(key));
+        const now = typeof doc.now === 'number' ? doc.now : null;
+        return view(doc, 'ALL').rows
+            .filter(m => !old.has(key(m)) && (now === null || now - m.t <= NEW_MAX_AGE_S))
+            .sort((a, b) => a.t - b.t)
+            .slice(-NEW_MAX);
+    }
+
     function sameMovement(a, b) {
         return !!a && !!b && a.t === b.t && a.kind === b.kind && a.hex === b.hex;
     }
 
     function mount(el, options) {
         const o = Object.assign({
-            url: 'movements.json', pollMs: 60000, timeZone: 'UTC', onSelect: null, onGa: null,
+            url: 'movements.json', pollMs: 60000, timeZone: 'UTC', onSelect: null, onGa: null, onNew: null,
         }, options || {});
         let doc = null, filter = 'ALL', selected = null, selectedView = null, timer = null;
         el.classList.add('mv-view');
@@ -234,8 +252,11 @@
             try {
                 const res = await fetch(o.url, { cache: 'no-store' });
                 if (!res.ok) return;
+                const prev = doc;
                 doc = await res.json();
                 render();
+                const fresh = newMovements(prev, doc);
+                if (fresh.length && o.onNew) o.onNew(fresh);
             } catch (e) {
                 // try again on the next poll
             }
@@ -252,7 +273,7 @@
         return { refresh, stop };
     }
 
-    const Movements = { mount, view, cells, traceParams, mapView, sameMovement, hhmm, dayText, withDays, showingText };
+    const Movements = { mount, view, cells, traceParams, mapView, sameMovement, newMovements, hhmm, dayText, withDays, showingText };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = Movements;
         return;

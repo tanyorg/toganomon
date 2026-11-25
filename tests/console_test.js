@@ -80,6 +80,51 @@ t('windLines: the runway in use, else the ends with a headwind', () => {
     assert.deepStrictEqual(W.windLines(w, AP, []), W.windLines(w, AP, null));
 });
 
+t('inUse / useOf: { arr, dep } from Stats, or a designator or a list', () => {
+    const use = { arr: ['22', '23'], dep: ['16R', '23'] };
+    assert.deepStrictEqual(W.inUse(use), ['22', '23', '16R']);
+    assert.deepStrictEqual([W.useOf(use, '22'), W.useOf(use, '16R'), W.useOf(use, '23'), W.useOf(use, '34')],
+        ['arr', 'dep', 'both', null]);
+    assert.deepStrictEqual([W.useOf('34', '34'), W.useOf(['16'], '16'), W.useOf(null, '16')], ['both', 'both', null]);
+    const w = W.parseWind('ZZZZ 1Z 22006KT');
+    assert.deepStrictEqual(W.windLines(w, AP, { arr: ['27'], dep: ['16'] }), ['RWY27 HW 4 · XW 5L', 'RWY16 HW 2 · XW 6R']);
+});
+
+t('layout: RJTT runways where they are, names apart and inside the dial', () => {
+    const fs = require('fs');
+    const rjtt = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'airports.json'), 'utf8')).airports.RJTT;
+    const lay = W.layout(rjtt, 60);
+    const e = lay.ends;
+    // 16L (C runway) east of 16R (A runway); one runway's two ends meet
+    assert.ok(e['16L'].thr[0] > e['16R'].thr[0]);
+    assert.deepStrictEqual(e['16L'].thr, e['34R'].far);
+    assert.deepStrictEqual([e['16L'].track, e['34R'].track], [150, 330]);
+    // 05/23 south-east of the rest
+    assert.ok(e['23'].thr[1] > e['16L'].far[1] - 5 && e['05'].thr[0] > 0);
+    const labels = Object.values(e).map(x => x.label);
+    for (let i = 0; i < labels.length; i++) {
+        assert.ok(Math.hypot(...labels[i]) < 50, 'inside the dial');
+        for (let j = i + 1; j < labels.length; j++) {
+            assert.ok(Math.hypot(labels[i][0] - labels[j][0], labels[i][1] - labels[j][1]) > 12.9, 'apart');
+        }
+    }
+    // the runways fit within r - 26 of the middle
+    for (const r of lay.runways) for (const p of [r.a, r.b]) assert.ok(Math.hypot(...p) <= 34.01);
+});
+
+t('layout: without a centre, through the middle at the true track', () => {
+    const lay = W.layout({ runways: [{ ends: ['16', '34'], true_track: 150 }] }, 60);
+    assert.deepStrictEqual(lay.runways[0].b.map(v => Math.round(v)), [19, 33]);
+    assert.deepStrictEqual(lay.runways[0].a.map(v => Math.round(v)), [-19, -33]);
+    assert.deepStrictEqual(W.layout(null, 60), { runways: [], ends: {} });
+});
+
+t('flowSeconds: faster in a stronger wind', () => {
+    assert.strictEqual(W.flowSeconds({ spd: 14, unit: 'kt' }).toFixed(2), '2.22');
+    assert.strictEqual(W.flowSeconds({ spd: 0, unit: 'kt' }), 10);
+    assert.ok(Math.abs(W.flowSeconds({ spd: 7, unit: 'm/s' }) - W.flowSeconds({ spd: 13.6, unit: 'kt' })) < 0.01);
+});
+
 t('dirText / speedText / gustText / varText', () => {
     assert.strictEqual(W.dirText(W.parseWind('Z 1Z 05010KT')), '050°');
     assert.strictEqual(W.dirText(W.parseWind('Z 1Z VRB03KT')), 'VRB');
@@ -144,6 +189,8 @@ t('Stats.view: runways in use from "runways", arrivals and departures apart', ()
     // none in the last half hour: the last movement's runway for an hour, as before
     const quiet = { ...SUM, runways: { arr: [], dep: [] } };
     assert.deepStrictEqual(S.view(quiet, NOW, 'UTC').runways.ends, ['16']);
+    // the kind is not known then: both (amber on the WIND dial)
+    assert.deepStrictEqual([S.view(quiet, NOW, 'UTC').runways.arr, S.view(quiet, NOW, 'UTC').runways.dep], [['16'], ['16']]);
     assert.strictEqual(S.view({ ...quiet, runway_t: NOW - 3601 }, NOW, 'UTC').runways, null);
     // junk in "runways" is ignored
     assert.strictEqual(S.view({ ...SUM, runways: { arr: [3, null, ''], dep: 'x' } }, NOW, 'UTC').runway, '16');
@@ -215,6 +262,18 @@ t('Movements.view: rows for a filter and the counts', () => {
     assert.deepStrictEqual(all.rows.map(m => m.t), [T, T - 60, T - 120]);
     assert.deepStrictEqual(M.view(MV, 'DEP').rows.map(m => m.kind), ['dep']);
     assert.deepStrictEqual(M.view(null, 'ARR'), { rows: [], counts: { ALL: 0, ARR: 0, DEP: 0 } });
+});
+
+t('Movements.newMovements: the ones since the last poll, oldest first', () => {
+    const mv = (t, kind, hex) => ({ t, kind, hex, rwy: '34' });
+    const prev = { now: 1000, movements: [mv(900, 'arr', 'a'), mv(800, 'dep', 'b')] };
+    const doc = { now: 1060, movements: [mv(1050, 'dep', 'c'), mv(1000, 'arr', 'd'), ...prev.movements] };
+    assert.deepStrictEqual(M.newMovements(prev, doc).map(m => m.hex), ['d', 'c']);
+    assert.deepStrictEqual(M.newMovements(null, doc), []);          // first poll
+    assert.deepStrictEqual(M.newMovements(prev, prev), []);
+    // a tab that slept: only the last few, none older than 5 minutes
+    const many = { now: 5000, movements: [mv(4000, 'arr', 'x'), ...[1, 2, 3, 4, 5].map(i => mv(4900 + i, 'arr', 'n' + i))] };
+    assert.deepStrictEqual(M.newMovements(prev, many).map(m => m.hex), ['n2', 'n3', 'n4', 'n5']);
 });
 
 t('Movements.cells: local time, ARR/DEP, hex without a callsign', () => {
