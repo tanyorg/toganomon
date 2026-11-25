@@ -62,10 +62,16 @@
         return n + s;
     }
 
+    // Where the approach was given up: through the runway gate (OVER RWY) or
+    // above it on the final ("missed", ON FINAL). Both are go-arounds.
+    function whereText(g) {
+        return g.missed ? 'ON FINAL' : 'OVER RWY';
+    }
+
     function title(g, timeZone) {
         const parts = [clock(g.t, timeZone, true), g.flight || '???'];
         if (g.reg) parts.push(g.reg);
-        parts.push(`RWY${g.rwy}`);
+        parts.push(`RWY${g.rwy}`, whereText(g));
         if (typeof g.nth === 'number' && g.nth > 1) parts.push(ordinal(g.nth));
         return parts.join('  ');
     }
@@ -74,11 +80,11 @@
         return g.type ? `TYPE ${g.type}` : '';
     }
 
-    // A missed approach flown above the gate (no arrival before it): where and how low it turned back.
+    // A go-around above the gate (ON FINAL, no arrival before it): where and how low it turned back.
     function climbText(g) {
         const m = g.missed;
         if (m && typeof m.km === 'number' && typeof m.low_ft === 'number') {
-            return `MISSED APPROACH ${m.km} KM OUT · LOWEST ${m.low_ft} FT`;
+            return `${m.km} KM OUT · LOWEST ${m.low_ft} FT`;
         }
         return typeof g.climb_after_s === 'number' ? `CLIMB AFTER ${g.climb_after_s} s` : '';
     }
@@ -405,6 +411,7 @@
                 list.appendChild(empty);
                 return;
             }
+            const toDraw = [];
             for (const g of items) {
                 const isOpen = open.has(g.id);
                 const item = document.createElement('div');
@@ -425,13 +432,15 @@
                     item.appendChild(fig);
                     if (!drawn.has(g.id)) {
                         drawn.add(g.id);
-                        replay(fig, g, airport);
+                        toDraw.push([fig, g]);
                     }
                 }
                 list.appendChild(item);
             }
             for (const id of [...drawn]) if (!open.has(id)) drawn.delete(id);
             fit();
+            // once in the page: replay() stops on a figure that is not
+            for (const [fig, g] of toDraw) replay(fig, g, airport);
         }
 
         async function refresh() {
@@ -500,7 +509,7 @@
     }
 
     const api = {
-        mount, unlockChime, chime, clock, ordinal, title, typeText, climbText, outcomeText, windText, infoLines, legend,
+        mount, unlockChime, chime, clock, ordinal, whereText, title, typeText, climbText, outcomeText, windText, infoLines, legend,
         runwayOf, trackGeometry, trackAt, openIds, plotInset, flightAware,
     };
     if (typeof module === 'object' && module.exports) module.exports = api;

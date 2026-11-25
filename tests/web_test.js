@@ -28,24 +28,31 @@ const RJFF = { icao: 'RJFF', arp: [33.585, 130.451],
     runways: [{ ends: ['16', '34'], true_track: 157, center: [33.585, 130.451], length_m: 2800 }] };
 
 t('title: date, time, callsign, runway in the given zone', () => {
-    assert.strictEqual(v.title(base, JST), '11/13 13:02  HGB308  RWY34');
-    assert.strictEqual(v.title(base, 'UTC'), '11/13 04:02  HGB308  RWY34');
-    assert.strictEqual(v.title({ ...base, flight: null }, JST), '11/13 13:02  ???  RWY34');
+    assert.strictEqual(v.title(base, JST), '11/13 13:02  HGB308  RWY34  OVER RWY');
+    assert.strictEqual(v.title(base, 'UTC'), '11/13 04:02  HGB308  RWY34  OVER RWY');
+    assert.strictEqual(v.title({ ...base, flight: null }, JST), '11/13 13:02  ???  RWY34  OVER RWY');
 });
 
 t('title: registration and the same airframe\'s 2nd go-around', () => {
-    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 1 }, JST), '11/13 13:02  HGB308  JA136A  RWY34');
-    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 2 }, JST), '11/13 13:02  HGB308  JA136A  RWY34  2ND');
-    assert.strictEqual(v.title({ ...base, reg: null, nth: 3 }, JST), '11/13 13:02  HGB308  RWY34  3RD');
+    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 1 }, JST), '11/13 13:02  HGB308  JA136A  RWY34  OVER RWY');
+    assert.strictEqual(v.title({ ...base, reg: 'JA136A', nth: 2 }, JST), '11/13 13:02  HGB308  JA136A  RWY34  OVER RWY  2ND');
+    assert.strictEqual(v.title({ ...base, reg: null, nth: 3 }, JST), '11/13 13:02  HGB308  RWY34  OVER RWY  3RD');
     assert.deepStrictEqual([1, 2, 3, 4, 11, 12, 13, 21, 22].map(v.ordinal),
         ['1ST', '2ND', '3RD', '4TH', '11TH', '12TH', '13TH', '21ST', '22ND']);
+});
+
+t('title: OVER RWY through the gate, ON FINAL above it', () => {
+    assert.strictEqual(v.whereText(base), 'OVER RWY');
+    assert.strictEqual(v.whereText({ ...base, missed: { low_ft: 1031, km: 6.7 } }), 'ON FINAL');
+    assert.strictEqual(v.title({ ...base, reg: 'JA738A', missed: { low_ft: 1031, km: 6.7 } }, JST),
+        '11/13 13:02  HGB308  JA738A  RWY34  ON FINAL');
 });
 
 t('climbText', () => {
     assert.strictEqual(v.climbText(base), 'CLIMB AFTER 65 s');
     assert.strictEqual(v.climbText({ ...base, climb_after_s: null }), '');
     assert.strictEqual(v.climbText({ ...base, climb_after_s: 20, missed: { low_ft: 1050, km: 7.5 } }),
-        'MISSED APPROACH 7.5 KM OUT · LOWEST 1050 FT');
+        '7.5 KM OUT · LOWEST 1050 FT');
 });
 
 t('outcomeText: every status', () => {
@@ -70,9 +77,9 @@ t('windText: gusts, head/tail and cross components', () => {
 });
 
 t('infoLines: title first, empty parts dropped', () => {
-    assert.deepStrictEqual(v.infoLines(base, JST), ['11/13 13:02  HGB308  RWY34', 'CLIMB AFTER 65 s', 'PENDING', 'WIND ---']);
-    assert.deepStrictEqual(v.infoLines({ ...base, climb_after_s: null }, JST), ['11/13 13:02  HGB308  RWY34', 'PENDING', 'WIND ---']);
-    assert.deepStrictEqual(v.infoLines({ ...base, type: 'A21N' }, JST).slice(0, 2), ['11/13 13:02  HGB308  RWY34', 'TYPE A21N']);
+    assert.deepStrictEqual(v.infoLines(base, JST), ['11/13 13:02  HGB308  RWY34  OVER RWY', 'CLIMB AFTER 65 s', 'PENDING', 'WIND ---']);
+    assert.deepStrictEqual(v.infoLines({ ...base, climb_after_s: null }, JST), ['11/13 13:02  HGB308  RWY34  OVER RWY', 'PENDING', 'WIND ---']);
+    assert.deepStrictEqual(v.infoLines({ ...base, type: 'A21N' }, JST).slice(0, 2), ['11/13 13:02  HGB308  RWY34  OVER RWY', 'TYPE A21N']);
 });
 
 t('runwayOf: from the airport block, with fallbacks', () => {
