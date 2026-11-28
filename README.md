@@ -55,6 +55,18 @@ Part of the same family as [gnomon](https://github.com/tanyorg/gnomon)
 It reads [readsb](https://github.com/wiedehopf/readsb)'s per-aircraft
 traces; it does not decode radio itself.
 
+## How it fits together
+
+![ADS-B receiver → ultrafeeder (readsb + tar1090) → shared volumes → toganomon every minute (with METAR/TAF from NOAA) → JSON → nginx → browser](docs/architecture.svg)
+
+The Docker layout is three containers sharing volumes. ultrafeeder takes
+the Beast data and writes `aircraft.json` and the per-aircraft traces to a
+tmpfs volume; toganomon reads them once a minute (read-only), keeps its
+history and logs on `toganomon-state` and writes the JSON the console
+shows to `toganomon-web`; nginx serves the console, that JSON and tar1090.
+Without Docker the same pieces are a readsb with `--write-json-globe-index`,
+cron and any web server ([docs/INSTALL.md](docs/INSTALL.md)).
+
 ## Quick start (Docker)
 
 You need Docker with the compose plugin, and ADS-B data: either a receiver

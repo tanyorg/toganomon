@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-labelledby="t d">
+  <title id="t">toganomon: how the Docker layout fits together</title>
+  <desc id="d">An ADS-B receiver sends Beast data to the ultrafeeder container (readsb and tar1090), which writes aircraft.json and per-aircraft traces to a shared tmpfs volume and keeps the tar1090 aircraft database on another volume. The toganomon container runs toganomon.py every minute on those files, fetches METAR and TAF from NOAA, keeps its history and logs on one volume and writes the JSON for the browser to another. The web container (nginx) serves the console, the go-around view, that JSON and tar1090 (proxied to ultrafeeder) to the browser.</desc>
+  <style>
+    svg { --bg: #ffffff; --ink: #17222c; --muted: #5a6875; --rule: #c8d2da;
+          --adsb: #6a49c4; --wx: #a8640c; --file: #0b7a86; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg: #0d1117; --ink: #dfe7ee; --muted: #93a2af; --rule: #2c3945;
+            --adsb: #a68cf2; --wx: #e3a14a; --file: #3cc1cf; }
+    }
+    .bg { fill: var(--bg); }
+    .box { fill: var(--bg); stroke: var(--ink); stroke-width: 1.4; }
+    .vol { fill: var(--bg); stroke: var(--file); stroke-width: 1.2; stroke-dasharray: 5 3; }
+    .host { fill: none; stroke: var(--rule); stroke-width: 1.4; }
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); }
+    .title { font-size: 14px; font-weight: 700; }
+    .sub { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; fill: var(--muted); }
+    .host-t { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; fill: var(--muted); }
+    .label { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; }
+    .f-adsb { stroke: var(--adsb); stroke-width: 2.4; fill: none; }
+    .f-wx { stroke: var(--wx); stroke-width: 2.4; fill: none; }
+    .f-file { stroke: var(--file); stroke-width: 2; fill: none; }
+    .f-web { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+    .c-adsb { fill: var(--adsb); } .c-wx { fill: var(--wx); } .c-file { fill: var(--file); } .c-web { fill: var(--ink); }
+    .l-adsb { fill: var(--adsb); } .l-wx { fill: var(--wx); } .l-file { fill: var(--file); }
+  </style>
+  <defs>
+    <marker id="a-adsb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="c-adsb" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-wx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="c-wx" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="c-file" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="a-web" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="c-web" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="640"/>
+
+  <!-- legend -->
+  <path class="f-adsb" d="M20 20 H48"/><text class="label l-adsb" x="56" y="24">ADS-B</text>
+  <path class="f-wx" d="M120 20 H148"/><text class="label l-wx" x="156" y="24">METAR / TAF</text>
+  <path class="f-file" d="M262 20 H290"/><text class="label l-file" x="298" y="24">files on volumes</text>
+  <path class="f-web" d="M430 20 H458"/><text class="label" x="466" y="24">HTTP</text>
+
+  <!-- sources -->
+  <rect class="box" x="20" y="80" width="220" height="96" rx="6"/>
+  <text class="title" x="34" y="104">ADS-B receiver</text>
+  <text class="sub" x="34" y="124">Beast out, e.g. tcp/30005</text>
+  <text class="sub" x="34" y="142">BEAST_HOST:BEAST_PORT</text>
+  <text class="sub" x="34" y="160">(or an RTL-SDR on ultrafeeder)</text>
+
+  <rect class="box" x="20" y="318" width="220" height="76" rx="6"/>
+  <text class="title" x="34" y="342">NOAA tgftp</text>
+  <text class="sub" x="34" y="362">METAR / TAF of the airport</text>
+  <text class="sub" x="34" y="380">plain text over HTTPS</text>
+
+  <!-- compose project -->
+  <rect class="host" x="270" y="46" width="440" height="574" rx="10"/>
+  <text class="host-t" x="286" y="68">docker compose · project "toganomon"</text>
+
+  <rect class="box" x="290" y="80" width="400" height="96" rx="6"/>
+  <text class="title" x="304" y="104">ultrafeeder</text>
+  <text class="sub" x="304" y="124">readsb + tar1090 (pinned build)</text>
+  <text class="sub" x="304" y="142">--write-json-globe-index: per-aircraft traces</text>
+  <text class="sub" x="304" y="160">tar1090 aircraft database (registration, type)</text>
+
+  <rect class="vol" x="290" y="200" width="190" height="62" rx="6"/>
+  <text class="title" x="304" y="222">readsb-run (tmpfs)</text>
+  <text class="sub" x="304" y="244">aircraft.json · traces/</text>
+  <rect class="vol" x="500" y="200" width="190" height="62" rx="6"/>
+  <text class="title" x="514" y="222">globe-history</text>
+  <text class="sub" x="514" y="244">tar1090-db, ultrafeeder state</text>
+
+  <rect class="box" x="290" y="290" width="400" height="96" rx="6"/>
+  <text class="title" x="304" y="314">toganomon</text>
+  <text class="sub" x="304" y="334">toganomon.py every minute: arrivals, departures,</text>
+  <text class="sub" x="304" y="352">runways in use, go-arounds, missed approaches</text>
+  <text class="sub" x="304" y="370">fetch_wx.py: METAR every 10 min, TAF every 30</text>
+
+  <rect class="vol" x="290" y="412" width="190" height="98" rx="6"/>
+  <text class="title" x="304" y="434">toganomon-state</text>
+  <text class="sub" x="304" y="456">go-around history</text>
+  <text class="sub" x="304" y="474">movements.log</text>
+  <text class="sub" x="304" y="492">events.log · wx/ archive</text>
+  <rect class="vol" x="500" y="412" width="190" height="98" rx="6"/>
+  <text class="title" x="514" y="434">toganomon-web</text>
+  <text class="sub" x="514" y="456">summary.json</text>
+  <text class="sub" x="514" y="474">go-arounds.json</text>
+  <text class="sub" x="514" y="492">movements.json · metar/taf</text>
+
+  <rect class="box" x="290" y="534" width="400" height="70" rx="6"/>
+  <text class="title" x="304" y="558">web (nginx) · WEB_PORT</text>
+  <text class="sub" x="304" y="578">/ console · /web/ go-around view</text>
+  <text class="sub" x="304" y="596">/toganomon/ the JSON · /tar1090/ → ultrafeeder</text>
+
+  <!-- browser -->
+  <rect class="box" x="760" y="420" width="180" height="184" rx="6"/>
+  <text class="title" x="774" y="444">Browser</text>
+  <text class="sub" x="774" y="466">tar1090 map with</text>
+  <text class="sub" x="774" y="484">floating windows:</text>
+  <text class="sub" x="774" y="504">RWY/WIND</text>
+  <text class="sub" x="774" y="522">LAST 24H</text>
+  <text class="sub" x="774" y="540">MOVEMENTS</text>
+  <text class="sub" x="774" y="558">GO-AROUNDS</text>
+  <text class="sub" x="774" y="584">METAR · TAF · clocks</text>
+
+  <!-- flows -->
+  <path class="f-adsb" d="M240 128 H290" marker-end="url(#a-adsb)"/>
+  <text class="label l-adsb" x="246" y="120">Beast</text>
+  <path class="f-file" d="M385 176 V200" marker-end="url(#a-file)"/>
+  <path class="f-file" d="M595 176 V200" marker-end="url(#a-file)"/>
+  <path class="f-file" d="M385 262 V290" marker-end="url(#a-file)"/>
+  <path class="f-file" d="M595 262 V290" marker-end="url(#a-file)"/>
+  <text class="label l-file" x="392" y="281">read-only</text>
+  <path class="f-wx" d="M240 356 H290" marker-end="url(#a-wx)"/>
+  <text class="label l-wx" x="246" y="348">HTTPS</text>
+  <path class="f-file" d="M385 386 V412" marker-end="url(#a-file)"/>
+  <path class="f-file" d="M595 386 V412" marker-end="url(#a-file)"/>
+  <path class="f-file" d="M595 510 V534" marker-end="url(#a-file)"/>
+  <!-- /tar1090/ proxy to ultrafeeder -->
+  <path class="f-web" d="M690 569 H700 V128 H690" marker-end="url(#a-web)"/>
+  <text class="label" x="716" y="300">proxy</text>
+  <text class="label" x="716" y="316">/tar1090/</text>
+  <path class="f-web" d="M690 590 H760" marker-end="url(#a-web)"/>
+  <text class="label" x="716" y="582">HTTP</text>
+</svg>
